@@ -1,3 +1,5 @@
+import abc
+
 import numpy as np
 from scipy import stats
 from matplotlib import pyplot as plt
@@ -10,6 +12,13 @@ T = 4 # (ms) time window
 npdm = 8280 # number of PDMs
 nphotons = 10 # (2-100) number of photons in the S1 signal
 tres = 3 # (ns) temporal resolution (3-10)
+nmc = 1000 # number of simulated events
+
+###############################
+
+# convert to nanoseconds
+DCR /= 1e9
+T *= 1e6
 
 def p_exp(t, tau):
     """
@@ -32,11 +41,18 @@ def p_S1(t, VL, tauV, tauL):
     L = 1 / (1 + VL)
     return V * p_exp(t, tauV) + L * p_exp(t, tauL)
 
+def log_p_exp_gauss(t, tau, sigma):
+    """
+    (Logarithm of) exponential pdf with scale tau convoluted with a normal with
+    scale sigma.
+    """
+    return -np.log(tau) - t/tau + 1/2 * (sigma / tau) ** 2 + stats.norm.logcdf(t / sigma - sigma / tau)
+
 def p_exp_gauss(t, tau, sigma):
     """
     Exponential pdf with scale tau convoluted with a normal with scale sigma.
     """
-    return 1/tau * np.exp(-t/tau) * np.exp(1/2 * (sigma / tau) ** 2) * stats.norm.cdf(t / sigma - sigma / tau)
+    return np.exp(log_p_exp_gauss(t, tau, sigma))
 
 def p_S1_gauss(t, VL, tauV, tauL, sigma):
     """
@@ -111,8 +127,12 @@ def check_gen_S1(VL=3, tauV=10, tauL=100, tres=5):
     
     ax = fig.subplots(1, 1)
     
+    ax.set_title('Time distribution of S1 photons')
+    ax.set_xlabel('Time [ns]')
+    ax.set_ylabel('Probabilty density [ns$^{-1}$]')
+
     gen = np.random.default_rng(202012181733)
-    s = gen_S1(100000, VL, tauV, tauL, tres, gen)
+    s = gen_S1((100, 100, 10), VL, tauV, tauL, tres, gen).reshape(-1)
     left, right = np.quantile(s, [0.001, 0.999])
     s = s[(s >= left) & (s <= right)]
     
@@ -127,7 +147,147 @@ def check_gen_S1(VL=3, tauV=10, tauL=100, tres=5):
     ax.grid()
     ax.set_yscale('log')
     
-    fig.tight_layout
+    fig.tight_layout()
     fig.show()
     
     return fig
+
+def gen_DCR(size, T, rate, generator=None):
+    """
+    Generate uniformly distributed hits. The output shape is size + number of
+    events per time window T.
+    """
+    size = (size,) if np.isscalar(size) else tuple(size)
+    if generator is None:
+        generator = np.random.default_rng()
+    size += (int(np.rint(T * rate)),)
+    return generator.uniform(0, T, size)
+
+def filter_empirical_density(thit):
+    """
+    Compute the inverse of the time interval between consecutive hits.
+    
+    Parameters
+    ----------
+    thit : array (nevents, nhits)
+        The input hit times. Each event must be already sorted.
+    
+    Return
+    ------
+    out : array (nevents, nhits - 1)
+        The filter output, computed at the central point between consecutive
+        hits.
+    """
+    return 1 / np.diff(thit, axis=-1)
+
+def filter_cross_correlation(thit, tout, fun):
+    """
+    Cross-correlate a function with the temporal hits and compute it at given
+    points. The output is:
+    
+        g(t) = 1/nhits * sum_i f(t_i - t)
+    
+    Parameters
+    ----------
+    thit : array (nevents, nhits)
+        The input hit times. Each event must be already sorted.
+    tout : array (nevents, nout)
+        The times where the filter output is computed.
+    fun : function
+        A ufunc with signature f(scalar) -> scalar.
+    
+    Return
+    ------
+    out : array (nevents, nout)
+        The filter output.
+    """
+    return np.mean(fun(thit[:, None, :] - tout[:, :, None]), axis=-1)
+
+def filter_empirical_density_cross_correlation(thit, tout, fun):
+    """
+    Cross-correlate a function with the empirical density of temporal hits and
+    compute it at given points. The output is:
+    
+        g(t) = 1/nhits * sum_i f((t_i + t_i+1) / 2 - t) / (t_i+1 - t_i)
+    
+    Parameters
+    ----------
+    thit : array (nevents, nhits)
+        The input hit times. Each event must be already sorted.
+    tout : array (nevents, nout)
+        The times where the filter output is computed.
+    fun : function
+        A ufunc with signature f(scalar) -> scalar.
+    
+    Return
+    ------
+    out : array (nevents, nout)
+        The filter output.
+    """
+    interval = np.diff(thit, axis=-1)
+    center = (thit[:, 1:] + thit[:, :-1]) / 2
+    return np.mean(fun(center[:, None, :] - tout[:, :, None]) / interval[:, None, :], axis=-1)
+
+def check_filters(nsignal=100, T=4e6, rate=0.0025, VL=3, tauV=7, tauL=1600, tres=10):
+    """
+    Plot filters output.
+    """
+    generator = np.random.default_rng(202012191535)
+
+    signal_loc = T / 2
+    hits1 = gen_S1(nsignal, VL, tauV, tauL, tres, generator)
+    hitdcr = gen_DCR((), T, rate, generator)
+    hitall = np.concatenate([hits1 + signal_loc, hitdcr])
+    
+    things = [
+        ['signal only', hits1],
+        ['noise only', hitdcr],
+        ['all hits', hitall]
+    ]
+    
+    fig = plt.figure('temps1.check_filters')
+    fig.clf()
+    
+    axs = fig.subplots(3, 1)
+    
+    for i, (desc, hits) in enumerate(things):
+        ax = axs[i]
+        hits = np.sort(hits)
+
+        fed = filter_empirical_density(hits[None, :])[0]
+        t_fed = (hits[1:] + hits[:-1]) / 2
+        
+        fun = lambda t: p_S1_gauss(t, VL, tauV, tauL, tres)
+        
+        margin = 3 * tauL
+        t = np.concatenate([hits[:1] - margin, hits, hits[-1:] + margin])
+        t = t[:-1, None] + np.arange(10) / 10 * np.diff(t)[:, None]
+        t = t.reshape(-1)
+        
+        fcc = filter_cross_correlation(hits[None, :], t[None, :], fun)[0]
+        fedcc = filter_empirical_density_cross_correlation(hits[None, :], t[None, :], fun)[0]
+    
+        ax.plot(t_fed, fed, label='empirical density')
+        ax.plot(t, fcc, label='cross correlation')
+        ax.plot(t, fedcc, label='empirical density cross correlation')
+    
+        ax.set_title(desc.capitalize())
+        if ax.is_last_row():
+            ax.set_xlabel('Time [ns]')
+        ax.set_ylabel('Filter output')
+        
+        ax.legend(loc='best', fontsize='small')
+        ax.minorticks_on()
+        ax.grid(True, which='major', linestyle='--')
+        ax.grid(True, which='minor', linestyle=':')
+        ax.set_yscale('log')
+
+    fig.tight_layout()
+    fig.show()
+    
+    return fig
+
+# generator = np.random.default_rng(202012191535)
+#
+# hits1 = gen_S1((nmc, nphotons), VL, tauV, tauL, tres, generator)
+# hitdcr = gen_DCR(nmc, T, DCR * npdm, generator)
