@@ -1,8 +1,10 @@
-import abc
-
 import numpy as np
-from scipy import stats
+from scipy import stats, special
 from matplotlib import pyplot as plt
+import numba
+import numba_scipy_special
+
+import ccdelta
 
 DCR = 250 # (Hz) Dark count rate per PDM, 25 or 250
 VL = 3 # fast/slow ratio, ER = 0.3, NR = 3
@@ -41,19 +43,24 @@ def p_S1(t, VL, tauV, tauL):
     L = 1 / (1 + VL)
     return V * p_exp(t, tauV) + L * p_exp(t, tauL)
 
+jit = numba.njit(cache=True)
+
+@jit
 def log_p_exp_gauss(t, tau, sigma):
     """
     (Logarithm of) exponential pdf with scale tau convoluted with a normal with
     scale sigma.
     """
-    return -np.log(tau) - t/tau + 1/2 * (sigma / tau) ** 2 + stats.norm.logcdf(t / sigma - sigma / tau)
+    return -np.log(tau) - t/tau + 1/2 * (sigma / tau) ** 2 + special.log_ndtr(t / sigma - sigma / tau)
 
+@jit
 def p_exp_gauss(t, tau, sigma):
     """
     Exponential pdf with scale tau convoluted with a normal with scale sigma.
     """
     return np.exp(log_p_exp_gauss(t, tau, sigma))
 
+@jit
 def p_S1_gauss(t, VL, tauV, tauL, sigma):
     """
     p_S1 convoluted with a normal with scale sigma.
@@ -180,7 +187,7 @@ def filter_empirical_density(thit):
     """
     return 1 / np.diff(thit, axis=-1)
 
-def filter_cross_correlation(thit, tout, fun):
+def filter_cross_correlation(thit, tout, fun, left, right):
     """
     Cross-correlate a function with the temporal hits and compute it at given
     points. The output is:
@@ -194,21 +201,23 @@ def filter_cross_correlation(thit, tout, fun):
     tout : array (nevents, nout)
         The times where the filter output is computed.
     fun : function
-        A ufunc with signature f(scalar) -> scalar.
+        A jittable function with signature scalar -> scalar.
+    left, right : scalar
+        Support of the function.
     
     Return
     ------
     out : array (nevents, nout)
         The filter output.
     """
-    return np.mean(fun(thit[:, None, :] - tout[:, :, None]), axis=-1)
+    return ccdelta.ccdelta(fun, thit, tout, left, right)
 
-def filter_empirical_density_cross_correlation(thit, tout, fun):
+def filter_empirical_density_cross_correlation(thit, tout, fun, left, right):
     """
     Cross-correlate a function with the empirical density of temporal hits and
     compute it at given points. The output is:
     
-        g(t) = 1/nhits * sum_i f((t_i + t_i+1) / 2 - t) / (t_i+1 - t_i)
+        g(t) = sum_i f((t_i + t_i+1) / 2 - t) / (t_i+1 - t_i)
     
     Parameters
     ----------
@@ -218,15 +227,17 @@ def filter_empirical_density_cross_correlation(thit, tout, fun):
         The times where the filter output is computed.
     fun : function
         A ufunc with signature f(scalar) -> scalar.
+    left, right : scalar
+        Support of the function.
     
     Return
     ------
     out : array (nevents, nout)
         The filter output.
     """
-    interval = np.diff(thit, axis=-1)
+    density = 1 / np.diff(thit, axis=-1)
     center = (thit[:, 1:] + thit[:, :-1]) / 2
-    return np.mean(fun(center[:, None, :] - tout[:, :, None]) / interval[:, None, :], axis=-1)
+    return ccdelta.ccdelta(fun, center, tout, left, right, w=density)
 
 def check_filters(nsignal=100, T=4e6, rate=0.0025, VL=3, tauV=7, tauL=1600, tres=10):
     """
@@ -258,6 +269,8 @@ def check_filters(nsignal=100, T=4e6, rate=0.0025, VL=3, tauV=7, tauL=1600, tres
         t_fed = (hits[1:] + hits[:-1]) / 2
         
         fun = lambda t: p_S1_gauss(t, VL, tauV, tauL, tres)
+        left = -5 * tres
+        right = 10 * tauL
         
         margin = 3 * tauL
         t = np.concatenate([hits[:1] - margin, hits, hits[-1:] + margin])
