@@ -1,7 +1,6 @@
 import numpy as np
 import numba
 
-@numba.njit
 def ccdelta(f, t, tout, left, right):
     """
     Compute the cross correlation of a given function with a mixture of dirac
@@ -10,11 +9,10 @@ def ccdelta(f, t, tout, left, right):
     Parameters
     ----------
     f : function
-        A nopython-mode numba jitted function with signature scalar->scalar.
-    t : array (M, N)
-        The locations of deltas. Must be sorted along the last axis. The
-        computation is broadcasted on the first axis.
-    tout : array (M, K)
+        A numba nopython jitted function with signature scalar->scalar.
+    t : array (..., N)
+        The locations of deltas. Must be sorted along the last axis.
+    tout : array (..., K)
         The points where the cross correlation is evaluated. Must be sorted
         along the last axis.
     left, right : scalar
@@ -23,52 +21,55 @@ def ccdelta(f, t, tout, left, right):
     
     Return
     ------
-    out : array (M, K)
-        The cross correlation evaluated on tout.
+    out : array (..., K)
+        The cross correlation evaluated on tout. The shape is determined by
+        broadcasting t with tout along all axes but the last.
     """
-    out = np.zeros(tout.shape)
+    assert callable(f)
+    t = np.asarray(t)
+    assert len(t.shape) >= 1
+    tout = np.asarray(tout)
+    assert len(tout.shape) >= 1
+    assert np.isscalar(left)
+    assert np.isscalar(right)
     
+    shape = np.broadcast(t[..., 0], tout[..., 0]).shape
+    t = np.broadcast_to(t, shape + t.shape[-1:]).reshape(-1, t.shape[-1])
+    tout = np.broadcast_to(tout, shape + tout.shape[-1:]).reshape(-1, tout.shape[-1])
+    out = np.zeros(shape + tout.shape[-1:])
+    
+    _ccdelta(f, t, tout, left, right, out.reshape(-1, out.shape[-1]))
+    
+    return out
+
+@numba.njit
+def _ccdelta(f, t, tout, left, right, out):
+    """
+    Compiled implementation of ccdelta. The out array must be initialized to
+    zero. The shapes of t, tout, out must be (M, N), (M, K), (M, K).
+    """
     for iouter in numba.prange(len(out)):
         td = t[iouter]
         tg = tout[iouter]
         g = out[iouter]
         
-        idr = 0
-        igl = 0
-        igr = 0
-        for idl in range(len(td)):
-            
-            # Find idr such that the slice td[idl:idr] is contained in the
-            # support length of f
-            while idr < len(td) and td[idr] <= td[idl] + (right - left):
-                idr += 1
-            
-            # Advance igl until the cross correlation at tg[igl] requires
-            # just td[idl:idr]
-            while igl < len(tg) and tg[igl] < td[idr - 1] - right:
-                igl += 1
-            
-            # Advance igr until the cross correlation at tg[igr] may not
-            # require just td[idl:idr]
-            igr = igl
-            while igr < len(tg) and tg[igr] <= td[idl] - left:
-                igr += 1
-            
-            # Compute the cross correlation at tg[igl:igr]
-            while igl < igr:
-                for i in range(idl, idr):
-                    g[igl] += f(td[i] - tg[igl])
-                g[igl] /= len(td)
-                # g[igl] = 1/len(td) * np.sum(f(td[idl:idr] - tg[igl]))
-                igl += 1
-    
-    return out
+        igmin = 0
+        for ti in td:
+            igmin += np.searchsorted(tg[igmin:], ti - right)
+            if igmin >= len(tg):
+                break
+            ig = igmin
+            while ig < len(tg) and tg[ig] <= ti - left:
+                g[ig] += f(ti - tg[ig])
+                ig += 1
+        
+        g /= len(td)
 
 if __name__ == '__main__':
     from matplotlib import pyplot as plt
     from scipy import interpolate
     
-    fig = plt.figure('ccdelta1')
+    fig = plt.figure('ccdelta')
     fig.clf()
     
     ax = fig.subplots(1, 1)
@@ -78,17 +79,18 @@ if __name__ == '__main__':
         return 1 if 0 < t < 1 else 0
     
     gen = np.random.default_rng(202012201928)
-    t = np.sort(gen.uniform(0, 20, 100))
-    tout = np.linspace(-2, 22, 10000)
+    t = np.sort(gen.uniform(0, 5, 25))
+    tout = np.linspace(-1, 6, 10000)
     
-    out = len(t) * ccdelta(f, t[None], tout[None], 0, 1)[0]
+    out = ccdelta(f, t, tout, 0, 1)
+    out2 = ccdelta(f, t[None, None], tout[None], 0, 1)[0, 0]
+    assert np.array_equal(out, out2)
+    out *= len(t)
     
     y = interpolate.interp1d(tout, out)
-    ax.plot(tout, out)
+    ax.plot(tout, out, color='lightgray')
     ax.plot(t, y(t), 'x', color='black')
     ax.plot(t - 1, y(t - 1), '+', color='black')
-    
-    ax.grid()
-    
+        
     fig.tight_layout()
-    fig.show()
+    plt.show()
