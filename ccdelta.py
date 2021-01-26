@@ -26,7 +26,7 @@ def ccdelta(f, t, tout, left, right, w=None):
     ------
     out : array (..., K)
         The cross correlation evaluated on tout. The shape is determined by
-        broadcasting t with tout along all axes but the last.
+        broadcasting together t, tout, and w along all axes but the last.
     """
     assert callable(f)
     if not hasattr(f, '__numba__'):
@@ -73,9 +73,6 @@ def _ccdelta(f, t, w, tout, left, right, out):
             wi = wd[i]
             
             igmin += np.searchsorted(tg[igmin:], ti - right)
-            if igmin >= len(tg):
-                break
-            
             ig = igmin
             while ig < len(tg) and tg[ig] <= ti - left:
                 g[ig] += wi * f(ti - tg[ig])

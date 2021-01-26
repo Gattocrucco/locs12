@@ -315,27 +315,28 @@ def all_filters(hits, VL, tauV, tauL, tres, midpoints=1):
     fed = filter_sample_mode(hits)
     t_fed = (hits[:, 1:] + hits[:, :-1]) / 2
     
-    # fun = lambda t: p_S1_gauss(t, VL, tauV, tauL, tres)
-    # left = -5 * tres
-    # right = 10 * tauL
-    #
-    # t = hits[:, :-1, None] + np.arange(midpoints + 1) / (midpoints + 1) * np.diff(hits, axis=-1)[:, :, None]
-    # t = t.reshape(hits.shape[0], (hits.shape[1] - 1) * (midpoints + 1))
-    #
-    # fcc = filter_cross_correlation(hits, t, fun, left, right)
+    fun = lambda t: p_S1_gauss(t, VL, tauV, tauL, tres)
+    left = -5 * tres
+    right = 10 * tauL
+
+    t = hits[:, :-1, None] + np.arange(midpoints + 1) / (midpoints + 1) * np.diff(hits, axis=-1)[:, :, None]
+    t = t.reshape(hits.shape[0], (hits.shape[1] - 1) * (midpoints + 1))
+
+    fcc = filter_cross_correlation(hits, t, fun, left, right)
     # fedcc = filter_sample_mode_cross_correlation(hits, t, fun, left, right)
     
     out = np.empty(len(hits), dtype=[
         (filter_name, [('max', float), ('maxtime', float)])
         for filter_name in [
             'sample mode',
-            # 'cross correlation',
+            'cross correlation',
             # 'sample mode cross correlation'
         ]
     ])
     
     # for t, f, n in zip([t_fed, t, t], [fed, fcc, fedcc], out.dtype.names):
-    for t, f, n in [(t_fed, fed, out.dtype.names[0])]:
+    for t, f, n in zip([t_fed, t], [fed, fcc], out.dtype.names):
+    # for t, f, n in [(t_fed, fed, out.dtype.names[0])]:
         out[n]['max'] = np.max(f, axis=-1)
         out[n]['maxtime'] = t[np.arange(len(hits)), np.argmax(f, axis=-1)]
     
@@ -368,9 +369,9 @@ def simulation(
     
     for fname in fdcr.dtype.names:
 
-        fig = plt.figure('temps1.simulation_' + fname.replace(" ", "_"))
+        fig = plt.figure('temps1.simulation_' + fname.replace(" ", "_"), figsize=[6.4, 7.19])
         fig.clf()
-        ax = fig.subplots(1, 1)
+        ax, axh = fig.subplots(2, 1)
     
         ax.set_title(f'S1 localization with temporal information\n{fname.capitalize()} filter')
         ax.set_xlabel('Threshold on peak filter output')
@@ -390,13 +391,14 @@ def simulation(
         
         ax.plot(fmax, trues1 / nmc, label='Sensitivity (True S1/S1 events)', drawstyle='steps-pre')
         ax.plot(fmax, fakes1 / nmc, label='Mismatch (Fake S1/S1 events)', drawstyle='steps-pre')
-    
-        ax.set_xscale('log')
+        
+        if fname == 'sample mode':
+            ax.set_xscale('log')
         ax.minorticks_on()
         ax.grid(True, which='major', linestyle='--')
         ax.grid(True, which='minor', linestyle=':')
         ax.set_ylim(0, 1)
-        ax.legend(loc='best')
+        ax.legend(loc='upper right')
         
         info = f"""\
 DCR = {DCR * npdm * 1e3:.2g} $\\mu$s$^{{-1}}$
@@ -420,7 +422,18 @@ temporal res. = {tres:.1f} ns"""
             ),
         )
         
-        ax.annotate(info, (0, 0), **kw)    
+        ax.annotate(info, (0, 0), **kw)
+        
+        x = np.sort(fall[fname]['maxtime']) - s1loc
+        axh.plot(np.concatenate([x, x[-1:]]), np.linspace(0, 1, len(x) + 1), drawstyle='steps-pre')
+        axh.axvline(-s1tol, color='k')
+        axh.axvline(s1tol, color='k')
+        
+        axh.set_xscale('symlog', linthreshx=10, linscalex=2)
+        axh.minorticks_on()
+        axh.grid(True, which='major', linestyle='--')
+        axh.grid(True, which='minor', linestyle=':')
+        axh.set_ylim(0, 1)
         
         fig.tight_layout()
         figs.append(fig)
