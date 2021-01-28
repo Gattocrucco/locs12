@@ -32,6 +32,7 @@ def clusterargsort(weight, time, radius):
     # time optional, defaults to array indices
     # time not already sorted
     # radius depends on array element
+    # propagate option
     
     time = np.asarray(time)
     weight = np.asarray(weight)
@@ -43,7 +44,7 @@ def clusterargsort(weight, time, radius):
     
     _clusterargsort(time, weight, radius, indices, length)
         
-    return indices[:length[-1]], length
+    return np.copy(indices[:length[-1]]), length
 
 @numba.njit(cache=True)
 def _clusterargsort(time, weight, radius, indices, length):
