@@ -72,6 +72,7 @@ DCR = {DCR * npdm * 1e3:.2g} $\\mu$s$^{{-1}}$
 T = {T * 1e-6:.1f} ms
 fast/slow = {VL:.1f}
 nphotons = {nphotons}
+$\\tau$ = ({tauV:.1f}, {tauL:.0f}) ns
 temporal res. = {tres:.1f} ns
 dead radius = {deadradius:.0f} ns
 match dist. = {matchdist:.0f} ns"""
@@ -127,6 +128,50 @@ match dist. = {matchdist:.0f} ns"""
         fig.tight_layout()
         figs.append(fig)
     
+        
+        figname = 'temps1.simulation_' + fname.replace(" ", "_") + '_combined'
+        fig, ax = plt.subplots(num=figname, clear=True)
+        ax.set_title(f'S1 localization with temporal information\n{fname.capitalize()} filter')
+        
+        ax.set_xlabel('S1 candidates per event')
+        ax.set_ylabel('S1 loss probability')
+        
+        time = filt['all'][fname]['time']
+        value = filt['all'][fname]['value']
+        
+        indices1, length = sortedidx['all']
+        indices0 = np.repeat(np.arange(nmc), np.diff(length))
+        
+        ftime = time[indices0, indices1]
+        fvalue = value[indices0, indices1]
+        
+        idx = np.argsort(fvalue)
+        ftime = ftime[idx]
+        fvalue = fvalue[idx]
+
+        close = np.abs(ftime - s1loc) < matchdist
+        closeidx = np.flatnonzero(close)
+        repeat = np.concatenate([[1], np.diff(closeidx), [1]])
+        
+        s1cand = np.arange(1 + len(fvalue))[::-1] / nmc
+        s1prob = np.arange(1 + len(closeidx)) / nmc
+        
+        s1cand = s1cand[closeidx[0]:closeidx[-1] + 2]
+        s1prob = np.repeat(s1prob, repeat)
+        
+        ax.plot(s1cand, s1prob, **plotkw['all'])
+        textbox.textbox(ax, info)
+
+        ax.minorticks_on()
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.grid(True, which='major', linestyle='--')
+        ax.grid(True, which='minor', linestyle=':')
+        ax.set_ylim(min(0, np.min(s1prob)), max(1, np.max(s1prob)))
+
+        fig.tight_layout()
+        figs.append(fig)
+
     for fig in figs:
         fig.show()
     
