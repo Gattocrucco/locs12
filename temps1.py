@@ -7,6 +7,35 @@ import filters
 import dcr
 import textbox
 
+def clustersort(time, value, deadradius):
+    """
+    Given a series of filtered events, remove all points which are close to a
+    point with higher value, unless the latter has already been removed by an
+    even higher one.
+    
+    Parameters
+    ----------
+    time, value : array (nevents, npoints)
+        The filter output.
+    deadradius : scalar
+        The temporal distance to consider points as close.
+    
+    Return
+    ------
+    time, value : array (N,)
+        N <= nevents * npoints. The value array is sorted, with the time
+        array matching the correct points in the value array. All events are
+        merged together.
+    """
+    indices1, length = clusterargsort.clusterargsort(value, time, deadradius)
+    indices0 = np.repeat(np.arange(len(value)), np.diff(length))
+    
+    value = value[indices0, indices1]
+    time = time[indices0, indices1]
+    
+    idx = np.argsort(value)
+    return time[idx], value[idx]
+
 def simulation(
     DCR=250e-9,       # (ns^-1) Dark count rate per PDM, 25 or 250 Hz
     VL=3,             # fast/slow ratio, ER=0.3, NR=3
@@ -46,10 +75,12 @@ def simulation(
     
     for fname in filt['all'].dtype.names:
         
-        sortedidx = {
-            k: clusterargsort.clusterargsort(fhits[fname]['value'], fhits[fname]['time'], deadradius)
-            for k, fhits in filt.items()
-        }
+        times = {}
+        values = {}
+        for k, fhits in filt.items():
+            time = fhits[fname]['time']
+            value = fhits[fname]['value']
+            times[k], values[k] = clustersort(time, value, deadradius)
         
         figname = 'temps1.simulation_' + fname.replace(" ", "_")
         fig, axs = plt.subplots(2, 1, num=figname, figsize=[6.4, 7.19], clear=True, sharex=True)
@@ -58,12 +89,8 @@ def simulation(
         ax = axs[0]
         ax.set_ylabel('Mean number of S1 candidates per event')
         
-        for k, (indices1, length) in sortedidx.items():
-            indices0 = np.repeat(np.arange(nmc), np.diff(length))
-            values = filt[k][fname]['value'][indices0, indices1]
-            values = np.sort(values)
-            
-            x = np.concatenate([values, values[-1:]])
+        for k, value in values.items():            
+            x = np.concatenate([value, value[-1:]])
             y = np.arange(len(x))[::-1] / nmc
             ax.plot(x, y, drawstyle='steps-pre', **plotkw[k])
         
@@ -92,18 +119,10 @@ match dist. = {matchdist:.0f} ns"""
         ax.set_ylabel('True S1 detection probability')
         ax.set_xlabel('Threshold on filter output')
         
-        time = filt['all'][fname]['time']
-        value = filt['all'][fname]['value']
-        
-        indices1, length = sortedidx['all']
-        indices0 = np.repeat(np.arange(nmc), np.diff(length))
-        
-        ftime = time[indices0, indices1]
-        fvalue = value[indices0, indices1]
+        time, value = times['all'], values['all']
 
-        close = np.abs(ftime - s1loc) < matchdist
-        
-        s1value = np.sort(fvalue[close])
+        close = np.abs(time - s1loc) < matchdist
+        s1value = value[close]
         
         x = np.concatenate([s1value, s1value[-1:]])
         y = np.arange(len(x))[::-1] / nmc
@@ -136,24 +155,13 @@ match dist. = {matchdist:.0f} ns"""
         ax.set_xlabel('S1 candidates per event')
         ax.set_ylabel('S1 loss probability')
         
-        time = filt['all'][fname]['time']
-        value = filt['all'][fname]['value']
+        time, value = times['all'], values['all']
         
-        indices1, length = sortedidx['all']
-        indices0 = np.repeat(np.arange(nmc), np.diff(length))
-        
-        ftime = time[indices0, indices1]
-        fvalue = value[indices0, indices1]
-        
-        idx = np.argsort(fvalue)
-        ftime = ftime[idx]
-        fvalue = fvalue[idx]
-
-        close = np.abs(ftime - s1loc) < matchdist
+        close = np.abs(time - s1loc) < matchdist
         closeidx = np.flatnonzero(close)
         repeat = np.concatenate([[1], np.diff(closeidx), [1]])
         
-        s1cand = np.arange(1 + len(fvalue))[::-1] / nmc
+        s1cand = np.arange(1 + len(value))[::-1] / nmc
         s1prob = np.arange(1 + len(closeidx)) / nmc
         
         s1cand = s1cand[closeidx[0]:closeidx[-1] + 2]
