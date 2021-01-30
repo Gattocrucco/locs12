@@ -8,6 +8,7 @@ import filters
 import dcr
 import textbox
 import qsigma
+import symloglocator
 
 def clustersort(time, value, deadradius):
     """
@@ -38,6 +39,19 @@ def clustersort(time, value, deadradius):
     idx = np.argsort(value)
     return time[idx], value[idx]
 
+def autolinscale(ax, xratio=20, yratio=20):
+    l, h = ax.get_xlim()
+    ratio = h / l
+    if ratio <= xratio:
+        ax.set_xscale('linear')
+        ax.set_xlim(0, h)
+
+    l, h = ax.get_ylim()
+    ratio = h / l
+    if ratio <= yratio:
+        ax.set_yscale('linear')
+        ax.set_ylim(0, h)
+
 def simulation(
     DCR=250e-9,       # (ns^-1) Dark count rate per PDM, 25 or 250 Hz
     VL=3,             # fast/slow ratio, ER=0.3, NR=3
@@ -53,7 +67,6 @@ def simulation(
     matchdist=2000,   # (ns) for matching a S1 candidate to the true S1
     seed=202012191535 # random generator seed
 ):
-    assert 2 * matchdist <= deadradius
     
     info = f"""\
 total DCR = {DCR * npdm * 1e3:.2g} $\\mu$s$^{{-1}}$
@@ -166,8 +179,8 @@ nevents = {nmc}"""
         
         close = np.abs(time - s1loc) < matchdist
         xs1 = value[close]
-        ys1 = np.arange(len(xs1)) / nmc
-        fs1 = interpolate.interp1d(xs1, ys1, fill_value=(0, 1), **interpkw)
+        ys1 = 1 - (1 + np.arange(len(xs1)))[::-1] / nmc
+        fs1 = interpolate.interp1d(xs1, ys1, fill_value=(1 - ys1[0], 1), **interpkw)
         
         x, y = xy['all']
         sel = (xs1[0] <= x) & (x <= xs1[-1])
@@ -185,9 +198,10 @@ nevents = {nmc}"""
         ax.set_yscale('log')
         ax.grid(True, which='major', linestyle='--')
         ax.grid(True, which='minor', linestyle=':')
-        ax.set_ylim(min(0, np.min(s1prob)), max(1, np.max(s1prob)))
         l, r = ax.get_xlim()
         ax.set_xlim(max(0.1, l), r)
+        ax.set_ylim(min(0, np.min(s1prob)), max(1, np.max(s1prob)))
+        autolinscale(ax)
 
         figname = 'temps1.simulation_' + fname.replace(" ", "_") + '_time'
         fig, axs = plt.subplots(2, 1, num=figname, clear=True, figsize=[6.4, 7.19])
@@ -208,8 +222,6 @@ nevents = {nmc}"""
         ax.axvspan(-deadradius, deadradius, color='#eee', zorder=-9, label='$\\pm$ dead radius')
         ax.axvspan(-matchdist,  matchdist,  color='#ccc', zorder=-8, label='$\\pm$ match dist.')
 
-        textbox.textbox(ax, info, loc='upper left')
-        
         ax.legend(loc='upper right')
         # ax.set_xscale('symlog', linthreshx=deadradius, linscalex=2)
         ax.set_xlim(3.5 * max(2 * matchdist, deadradius) * np.array([-1, 1]))
@@ -221,7 +233,7 @@ nevents = {nmc}"""
         
         ax = axs[1]
         ax.set_xlabel('Time relative to true S1 location [ns]')
-        ax.set_ylabel('Probability density [ns$^{-1}$]')
+        ax.set_ylabel('Histogram bin density [ns$^{-1}$]')
         
         times1 = hits1.reshape(-1)                
         time = times['all'] - s1loc
@@ -231,19 +243,22 @@ nevents = {nmc}"""
         
         # t = np.linspace(left, right, 1000)
         # ax.plot(t, pS1.p_S1_gauss(t, VL, tauV, tauL, tres), label='S1 pdf')
-        histkw = dict(bins='auto', density=True, histtype='step', zorder=1)
-        # ax.hist(time_ph, label=f'cand. within $\\pm$50% of ph. range ({len(time_ph)})', zorder=2, **histkw)
-        # ax.hist(time_match, label=f'cand. within match dist. ({len(time_match)})', zorder=3, **histkw)
-        ax.hist(times1, label=f'S1 photons ({len(times1)})', **histkw)
-        ax.hist(time_close, label=f'{nmc} closest candidates ($\\sigma_q$={qsigma.qsigma(time_close):.3g})', **histkw)
+        histkw = dict(bins='auto', density=True, histtype='step', zorder=10)
+        ax.hist(times1, label=f'S1 photons ({len(times1)})', linestyle=':', **histkw)
+        ax.hist(time_close, label=f'{nmc} closest candidates ($\\sigma_q$={qsigma.qsigma(time_close):.3g})', linestyle='--', **histkw)
         ax.hist(time_match, label=f'matching candidates ($\\sigma_q$={qsigma.qsigma(time_match):.3g})', **histkw)
         
         ax.axvspan(0, deadradius, color='#eee', zorder=-9, label='dead radius')
         ax.axvspan(0,  matchdist,  color='#ccc', zorder=-8, label='match dist.')
 
-        ax.legend(loc='upper right')#, fontsize='small')
-        # ax.set_yscale('log')
+        textbox.textbox(ax, info, loc='upper left', zorder=11)
+        
+        ax.legend(loc='upper right', fontsize='small')
+        ax.set_yscale('log')
+        linthreshx = 10 ** np.ceil(np.log10(15 * qsigma.qsigma(time_match)))
+        ax.set_xscale('symlog', linthreshx=linthreshx)
         ax.minorticks_on()
+        ax.xaxis.set_minor_locator(symloglocator.MinorSymLogLocator(linthreshx))
         ax.grid(True, which='major', linestyle='--')
         ax.grid(True, which='minor', linestyle=':')
 
