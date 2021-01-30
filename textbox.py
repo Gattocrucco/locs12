@@ -1,7 +1,11 @@
-def textbox(ax, text):
+def textbox(ax, text, loc='lower left'):
+    M = 8
+    locparams = {
+        'lower left': dict(xy=(0, 0), xytext=(M,  M), va='bottom'),
+        'upper left': dict(xy=(0, 1), xytext=(M, -M), va='top')
+    }
+    
     kw = dict(
-        xytext=(8, 8),
-        va='bottom',
         ha='left',
         fontsize='small',
         xycoords='axes fraction',
@@ -13,5 +17,6 @@ def textbox(ax, text):
             boxstyle='round'
         ),
     )
+    kw.update(locparams[loc])
     
-    return ax.annotate(text, (0, 0), **kw)
+    return ax.annotate(text, **kw)

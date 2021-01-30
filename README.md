@@ -19,6 +19,12 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
 
   * `pS1.py`: compute and sample the temporal distribution of S1 photons.
   
+  * `qsigma.py`: equivalent of standard deviation with quantiles.
+  
   * `runsliced.py`: do something in batches with a progressbar.
+  
+  * `sampling_bounds.py`: bounds for random ramples.
+  
+  * `temps1.py`: simulate the temporal localization of S1 signals.
   
   * `textbox.py`: draw a box with text on a plot.
