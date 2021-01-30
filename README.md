@@ -25,6 +25,8 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
   
   * `sampling_bounds.py`: bounds for random ramples.
   
+  * `symloglocator.py`: class to place minor ticks on symlog scales.
+  
   * `temps1.py`: simulate the temporal localization of S1 signals.
   
   * `textbox.py`: draw a box with text on a plot.
