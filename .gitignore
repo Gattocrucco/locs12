@@ -4,6 +4,7 @@
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
 __pycache__
+temps1plots20210131
 
 # Node artifact files
 node_modules/

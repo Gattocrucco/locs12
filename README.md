@@ -2,6 +2,12 @@
 
 Code to study the localization of S1 and S2 signals in DarkSide20k.
 
+## Scripts
+
+  * `temps1plots20210131.py`: save performance and diagnostic plots of s1
+    temporal localization filters with the version of `temps1.py` from January
+    31, 2021.
+
 ## Modules
 
   * `ccdelta.py`: compute the cross-correlation of dicrete points with a
@@ -13,9 +19,11 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
   * `dcr.py`: generate uniform hits.
   
   * `filters.py`: filters to be applied to a temporal sequence of hits.
+  
+  * `named_cartesian_product.py`: cartesian product of arrays.
     
-  * `numba_scipy_special/`: module to add support for scipy.special function in
-    numba.
+  * `numba_scipy_special/`: module to add support for `scipy.special` functions 
+    in numba.
 
   * `pS1.py`: compute and sample the temporal distribution of S1 photons.
   

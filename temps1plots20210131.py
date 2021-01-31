@@ -65,7 +65,7 @@ def simulation(
     nmc=10,           # number of simulated events
     deadradius=4000,  # (ns) for selecting S1 candidates in filter output
     matchdist=2000,   # (ns) for matching a S1 candidate to the true S1
-    seed=202012191535 # random generator seed
+    generator=None    # random generator
 ):
     
     info = f"""\
@@ -80,8 +80,6 @@ dead radius = {deadradius:.0f} ns
 match dist. = {matchdist:.0f} ns
 nevents = {nmc}"""
 
-    generator = np.random.default_rng(seed)
-
     hits1 = pS1.gen_S1((nmc, nphotons), VL, tauV, tauL, tres, generator)
     hitdcr = dcr.gen_DCR(nmc, T_sim, DCR * npdm, generator)
 
@@ -95,7 +93,7 @@ nevents = {nmc}"""
     }
 
     filt = {
-        k: filters.filters(hits, VL, tauV, tauL, tres, midpoints=1, pbar_batch=10)
+        k: filters.filters(hits, VL, tauV, tauL, tres, midpoints=1, pbar_batch=None)
         for k, hits in hitd.items()
     }
     
@@ -265,6 +263,56 @@ nevents = {nmc}"""
 
     for fig in figs:
         fig.tight_layout()
-        fig.show()
     
     return figs
+
+if __name__ == '__main__':
+    import os
+    import warnings
+    import tqdm
+    import named_cartesian_product
+    
+    arguments = dict(
+        DCR = [25e-9, 250e-9],
+        VL = [0.3, 3],
+        nphotons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 50],
+    )
+    fixedarguments = dict(
+        nmc = 1000,
+    )
+    dirname = 'temps1plots20210131'
+    
+    ####################
+    
+    warnings.filterwarnings("ignore")
+    
+    formatters = {
+        'DCR'     : lambda x: f'{x * 1e9:.0f}',
+        'nphotons': lambda x: f'{x:02d}'      ,
+    }
+    
+    generator = np.random.default_rng(202101311016)
+    
+    print(f'saving figures in {dirname}/...')
+    
+    arglist = named_cartesian_product.named_cartesian_product(**arguments).reshape(-1)
+    kw = dict(generator=generator)
+    kw.update(fixedarguments)
+    for argstruct in tqdm.tqdm(arglist):
+        argdict = {k: argstruct[k] for k in argstruct.dtype.names}
+
+        subdir = '_'.join([
+            f'{k}={formatters.get(k, lambda x: x)(v)}'
+            for k, v in argdict.items()
+        ])
+        dirpath = f'{dirname}/{subdir}'
+        os.makedirs(dirpath, exist_ok=False)
+
+        kw.update(argdict)
+        figs = simulation(**kw)
+        
+        for fig in figs:
+            figname = fig.canvas.get_window_title()
+            filename = figname.replace('temps1.simulation_', '')
+            filepath = f'{dirpath}/{filename}.png'
+            fig.savefig(filepath)
