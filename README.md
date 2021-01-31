@@ -21,6 +21,8 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
   * `filters.py`: filters to be applied to a temporal sequence of hits.
   
   * `named_cartesian_product.py`: cartesian product of arrays.
+  
+  * `npzload.py`: class to serialize objects to numpy archives.
     
   * `numba_scipy_special/`: module to add support for `scipy.special` functions 
     in numba.
