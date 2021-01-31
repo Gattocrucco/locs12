@@ -61,7 +61,7 @@ def autolinscale(ax, xratio=20, yratio=20):
 
 class Simulation(npzload.NPZLoad):
     
-    def __init__(
+    def __init__(self,
         DCR=250e-9,      # (ns^-1) Dark count rate per PDM, 25 or 250 Hz
         VL=3,            # fast/slow ratio, ER=0.3, NR=3
         tauV=7,          # (ns) fast component tau
@@ -75,7 +75,7 @@ class Simulation(npzload.NPZLoad):
         deadradius=4000, # (ns) for selecting S1 candidates in filter output
         matchdist=2000,  # (ns) for matching a S1 candidate to the true S1
         generator=None,  # numpy random generator, or integer seed
-        pbar_batch=None, # number of events for each progress bar step
+        pbar_batch=10,   # number of events for each progress bar step
     ):
         """
         Class to simulate S1 photons and DCR with temporal information only.
@@ -117,15 +117,15 @@ class Simulation(npzload.NPZLoad):
         Generate photons for S1, DCR, and merged, and save them to instance
         variables.
         """
-        self.hits1 = pS1.gen_S1((self.nmc, self.nphotons), self.VL, self.tauV, self.tauL, self.tres, self.generator)
+        self.hits1 = self.s1loc + pS1.gen_S1((self.nmc, self.nphotons), self.VL, self.tauV, self.tauL, self.tres, self.generator)
         self.hitdcr = dcr.gen_DCR(self.nmc, self.T_sim, self.DCR * self.npdm, self.generator)
-        self.hitall = np.concatenate([self.hits1 + self.s1loc, self.hitdcr], axis=-1)
+        self.hitall = np.concatenate([self.hits1, self.hitdcr], axis=-1)
     
-        self.hitd = dict(s1=hits1, all=hitall, dcr=hitdcr)
+        self.hitd = dict(s1=self.hits1, all=self.hitall, dcr=self.hitdcr)
         self.plotkw = {
-            's1': dict(label='No DCR events')
+            's1': dict(label='No DCR events'),
             'all': dict(label='Single S1 events'),
-            'dcr': dict(label='No S1 events', linestyle='--')
+            'dcr': dict(label='No S1 events', linestyle='--'),
         }
     
     def _run_filters(self):
@@ -177,12 +177,12 @@ class Simulation(npzload.NPZLoad):
         if signal:
             values = {
                 k: v[self.signal[fname][k]]
-                for k, v in values
+                for k, v in values.items()
             }
         
         x = dict(values)
         y = {
-            k: (1 + np.arange(len(v)))[::-1] / nmc
+            k: (1 + np.arange(len(v)))[::-1] / self.nmc
             for k, v in values.items()
         }
         # x = threshold
@@ -236,8 +236,8 @@ class Simulation(npzload.NPZLoad):
                 fname: self._counts_interp(fname, signalonly)
                 for fname in self.values
             })
-        
-        return tuple(reversed(getattr(self, cache)[fname][hits]))
+        x, interp = getattr(self, cache)[fname]
+        return interp[hits], x[hits]
         
     def plot_filter_performance_threshold(self, fname):
         figname = 'temps1.simulation_' + fname.replace(" ", "_")
@@ -297,7 +297,7 @@ class Simulation(npzload.NPZLoad):
         t = t[sel]
     
         s1cand = f(t)
-        s1prob = fs1(t)
+        s1prob = 1 - fs1(t)
     
         ax.plot(s1cand, s1prob)
         textbox.textbox(ax, self.infotext())
@@ -330,9 +330,9 @@ class Simulation(npzload.NPZLoad):
             time = self.times[fname][k]
             time = np.sort(time)
             ddecdf = 1 / np.diff(time)
-            x = time - s1loc
+            x = time - self.s1loc
             y = np.concatenate([ddecdf, ddecdf[-1:]])
-            ax.plot(x, y, drawstyle='steps-post', **plotkw[k])
+            ax.plot(x, y, drawstyle='steps-post', **self.plotkw[k])
     
         ax.axvspan(-self.deadradius, self.deadradius, color='#eee', zorder=-9, label='$\\pm$ dead radius')
         ax.axvspan(-self.matchdist,  self.matchdist,  color='#ccc', zorder=-8, label='$\\pm$ match dist.')
@@ -349,7 +349,7 @@ class Simulation(npzload.NPZLoad):
         ax.set_xlabel('Time relative to true S1 location [ns]')
         ax.set_ylabel('Histogram bin density [ns$^{-1}$]')
     
-        times1 = self.hits1.reshape(-1)                
+        times1 = self.hits1.reshape(-1) - self.s1loc               
         time = self.times[fname]['all'] - self.s1loc
         time_match = time[np.abs(time) < self.matchdist]
         idx = np.argsort(np.abs(time))
