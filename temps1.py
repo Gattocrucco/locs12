@@ -101,41 +101,53 @@ class Simulation(npzload.NPZLoad):
         self.nmc = nmc
         self.deadradius = deadradius
         self.matchdist = matchdist
-        self.generator = generator
         self.pbar_batch = pbar_batch
         
         # Internal parameters.
         self.s1loc = T_sim / 2
+        self.hitnames = np.array(['s1', 'dcr', 'all'])
         
         # Run the simulation.
-        self._gen_photons()
+        self._gen_photons(generator)
         self._run_filters()
+        self._make_dicts()
         self._merge_candidates()
     
-    def _gen_photons(self):
+    @classmethod
+    def load(cls, *args):
+        self = super().load(*args)
+        # these two functions save results to dictionaries which are not
+        # saved to the npz archive.
+        self._make_dicts()
+        self._merge_candidates()
+        return self
+        
+    def _gen_photons(self, generator):
         """
         Generate photons for S1, DCR, and merged, and save them to instance
         variables.
         """
-        self.hits1 = self.s1loc + pS1.gen_S1((self.nmc, self.nphotons), self.VL, self.tauV, self.tauL, self.tres, self.generator)
-        self.hitdcr = dcr.gen_DCR(self.nmc, self.T_sim, self.DCR * self.npdm, self.generator)
+        self.hits1 = self.s1loc + pS1.gen_S1((self.nmc, self.nphotons), self.VL, self.tauV, self.tauL, self.tres, generator)
+        self.hitdcr = dcr.gen_DCR(self.nmc, self.T_sim, self.DCR * self.npdm, generator)
         self.hitall = np.concatenate([self.hits1, self.hitdcr], axis=-1)
-    
-        self.hitd = dict(s1=self.hits1, all=self.hitall, dcr=self.hitdcr)
-        self.plotkw = {
-            's1': dict(label='No DCR events'),
-            'all': dict(label='Single S1 events'),
-            'dcr': dict(label='No S1 events', linestyle='--'),
-        }
     
     def _run_filters(self):
         """
         Run filters on photon hit time series and save them to an instance
         variable.
         """
-        self.filt = {
-            k: filters.filters(hits, self.VL, self.tauV, self.tauL, self.tres, midpoints=1, pbar_batch=self.pbar_batch)
-            for k, hits in self.hitd.items()
+        for n in self.hitnames:
+            hits = getattr(self, 'hit' + n)
+            f = filters.filters(hits, self.VL, self.tauV, self.tauL, self.tres, midpoints=1, pbar_batch=self.pbar_batch)
+            setattr(self, 'filt' + n, f)
+    
+    def _make_dicts(self):
+        self.hitd = dict(s1=self.hits1, all=self.hitall, dcr=self.hitdcr)
+        self.filtd = dict(s1=self.filts1, all=self.filtall, dcr=self.filtdcr)
+        self.plotkw = {
+            's1' : dict(label='No DCR events'),
+            'all': dict(label='Single S1 events'),
+            'dcr': dict(label='No S1 events', linestyle='--'),
         }
     
     def _merge_candidates(self):
@@ -148,7 +160,7 @@ class Simulation(npzload.NPZLoad):
         self.values = collections.defaultdict(dict)
         self.signal = collections.defaultdict(dict)
         
-        for k, fhits in self.filt.items():
+        for k, fhits in self.filtd.items():
             for fname in fhits.dtype.names:
                 
                 time = fhits[fname]['time']
@@ -240,7 +252,7 @@ class Simulation(npzload.NPZLoad):
         return interp[hits], x[hits]
         
     def plot_filter_performance_threshold(self, fname):
-        figname = 'temps1.simulation_' + fname.replace(" ", "_")
+        figname = 'temps1.Simulation.' + fname.replace(" ", "_")
         fig, axs = plt.subplots(2, 1, num=figname, figsize=[6.4, 7.19], clear=True, sharex=True)
         axs[0].set_title(f'{fname.capitalize()} filter detection performance\n(with explicit threshold)')
     
@@ -283,7 +295,7 @@ class Simulation(npzload.NPZLoad):
         return fig
     
     def plot_filter_performance(self, fname):
-        figname = 'temps1.simulation_' + fname.replace(" ", "_") + '_combined'
+        figname = 'temps1.Simulation.' + fname.replace(" ", "_") + '_combined'
         fig, ax = plt.subplots(num=figname, clear=True)
         ax.set_title(f'{fname.capitalize()} filter detection performance')
     
@@ -318,7 +330,7 @@ class Simulation(npzload.NPZLoad):
         return fig
     
     def plot_temporal_distribution(self, fname):
-        figname = 'temps1.simulation_' + fname.replace(" ", "_") + '_time'
+        figname = 'temps1.Simulation.' + fname.replace(" ", "_") + '_time'
         fig, axs = plt.subplots(2, 1, num=figname, clear=True, figsize=[6.4, 7.19])
         axs[0].set_title(f'{fname.capitalize()} filter\nTemporal distribution of S1 candidates')
     
