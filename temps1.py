@@ -263,6 +263,37 @@ class Simulation(npzload.NPZLoad):
             interp = lambda t: factor * interp0(t)
         
         return interp, x
+    
+    def efficiency_vs_rate(self, fname):
+        """
+        Give a function to compute the S1 detection efficiency given the rate
+        of fake S1 in noise photons.
+        
+        Parameters
+        ----------
+        fname : str
+            The filter to use.
+        
+        Return
+        ------
+        f : function scalar -> scalar
+            A piecewise linear function mapping fake rate to efficiency.
+        r : sorted 1D array
+            The rates where f changes slope.
+        """
+        f,   t   = self.candidates_above_threshold(fname, 'dcr', signalonly=False, rate=True )
+        fs1, ts1 = self.candidates_above_threshold(fname, 'all', signalonly=True , rate=False)
+        
+        sel = (ts1[0] <= t) & (t <= ts1[-1])
+        t = t[sel]
+        
+        t = np.sort(np.concatenate([t, ts1]))[::-1]
+
+        r = np.concatenate([[0], f(t)])
+        e = np.concatenate([[0], fs1(t)])
+        interpkw = dict(kind='linear', assume_sorted=True, copy=False, bounds_error=False)
+        f = interpolate.interp1d(r, e, fill_value=(e[0], e[-1]), **interpkw)
+        return f, r
         
     def plot_filter_performance_threshold(self, fname):
         figname = 'temps1.Simulation.plot_filter_performance_threshold.' + fname.replace(" ", "_")
@@ -320,20 +351,12 @@ class Simulation(npzload.NPZLoad):
         fig, ax = plt.subplots(num=figname, clear=True)
         ax.set_title(f'Filter detection performance')
     
-        ax.set_xlabel('Rate of S1 candidates in DCR [s$^{-1}$]')
+        ax.set_xlabel('Rate of S1 candidates in DC photons [s$^{-1}$]')
         ax.set_ylabel('S1 loss probability')
         
         for fname in filters:
-            f,   t   = self.candidates_above_threshold(fname, 'dcr', signalonly=False, rate=True )
-            fs1, ts1 = self.candidates_above_threshold(fname, 'all', signalonly=True , rate=False)
-        
-            sel = (ts1[0] <= t) & (t <= ts1[-1])
-            t = t[sel]
-    
-            s1cand = f(t)
-            s1prob = 1 - fs1(t)
-    
-            ax.plot(s1cand, s1prob, label=fname.capitalize() + ' filter')
+            f, r = self.efficiency_vs_rate(fname)
+            ax.plot(r, 1 - f(r), label=fname.capitalize() + ' filter')
         
         textbox.textbox(ax, self.infotext(), loc='lower left')
 
