@@ -9,6 +9,10 @@ class MinorSymLogLocator(Locator):
     Dynamically find minor tick positions based on the positions of
     major ticks for a symlog scaling.
     """
+    
+    # TODO if two major ticks appear within the linear range it's a mess.
+    # Minor ticks below the first linear inner major tick should not be drawn.
+    
     def __init__(self, linthresh, nints=10):
         """
         Ticks will be placed between the major ticks.

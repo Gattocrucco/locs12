@@ -80,6 +80,7 @@ class Simulation(npzload.NPZLoad):
         matchdist=2000,  # (ns) for matching a S1 candidate to the true S1
         generator=None,  # numpy random generator, or integer seed
         pbar_batch=10,   # number of events for each progress bar step
+        filters=None,    # (list of) filters to use, default cross correlation
     ):
         """
         Class to simulate S1 photons and DCR with temporal information only.
@@ -106,6 +107,11 @@ class Simulation(npzload.NPZLoad):
         self.deadradius = deadradius
         self.matchdist = matchdist
         self.pbar_batch = pbar_batch
+        if filters is None:
+            filters = 'cross correlation'
+        if isinstance(filters, str):
+            filters = [filters]
+        self.filters = np.array(filters)
         
         # Internal parameters.
         self.s1loc = T_sim / 2
@@ -142,16 +148,17 @@ class Simulation(npzload.NPZLoad):
         """
         for n in self.hitnames:
             hits = getattr(self, 'hit' + n)
-            f = filters.filters(hits, self.VL, self.tauV, self.tauL, self.tres, midpoints=1, pbar_batch=self.pbar_batch)
+            kw = dict(midpoints=1, pbar_batch=self.pbar_batch, which=self.filters)
+            f = filters.filters(hits, self.VL, self.tauV, self.tauL, self.tres, **kw)
             setattr(self, 'filt' + n, f)
     
     def _make_dicts(self):
         self.hitd = dict(s1=self.hits1, all=self.hitall, dcr=self.hitdcr)
         self.filtd = dict(s1=self.filts1, all=self.filtall, dcr=self.filtdcr)
         self.plotkw = {
-            's1' : dict(label='One S1 events', linestyle=':', color='#0b0'),
-            'all': dict(label='DCR + one S1 events', color='#00b'),
-            'dcr': dict(label='DCR events', linestyle='--', color='#b00'),
+            's1' : dict(label='One S1 events', linestyle='-', color='#0b0'),
+            'all': dict(label='DCR + one S1 events', color='#00b', linestyle='--'),
+            'dcr': dict(label='DCR events', linestyle=':', color='#b00'),
         }
     
     def _merge_candidates(self):
@@ -268,17 +275,25 @@ class Simulation(npzload.NPZLoad):
         
         return interp, x
     
-    def efficiency_vs_rate(self, fname, signalhits='all'):
+    def _fname(self, fname):
+        if fname is not None:
+            return fname
+        elif len(self.filters) == 1:
+            return self.filters[0]
+        else:
+            raise KeyError(fname)
+    
+    def efficiency_vs_rate(self, fname=None, signalhits='all'):
         """
         Give a function to compute the S1 detection efficiency given the rate
         of fake S1 in noise photons.
         
         Parameters
         ----------
-        fname : str
-            The filter to use.
+        fname : str, optional
+            The filter to use. Optional if there's only one filter.
         signalhits : {'all', 's1'}
-            Whether to count signals within noise or alone.
+            Whether to count signals within noise (default) or alone.
         
         Return
         ------
@@ -287,6 +302,8 @@ class Simulation(npzload.NPZLoad):
         r : sorted 1D array
             The rates where f changes slope.
         """
+        fname = self._fname(fname)
+        
         f,   t   = self.candidates_above_threshold(fname, 'dcr'     , signalonly=False, rate=True )
         fs1, ts1 = self.candidates_above_threshold(fname, signalhits, signalonly=True , rate=False)
         
@@ -301,7 +318,9 @@ class Simulation(npzload.NPZLoad):
         f = interpolate.interp1d(r, e, fill_value=(e[0], e[-1]), **interpkw)
         return f, r
         
-    def plot_filter_performance_threshold(self, fname):
+    def plot_filter_performance_threshold(self, fname=None):
+        fname = self._fname(fname)
+        
         figname = 'temps1.Simulation.plot_filter_performance_threshold.' + fname.replace(" ", "_")
         fig, axs = plt.subplots(2, 1, num=figname, figsize=[6.4, 7.19], clear=True, sharex=True)
         axs[0].set_title(f'{fname.capitalize()} filter detection performance')
@@ -348,8 +367,8 @@ class Simulation(npzload.NPZLoad):
     
     def plot_filter_performance(self, filters=None):
         if filters is None:
-            filters = self.filtd['all'].dtype.names
-        if isinstance(filters, str):
+            filters = self.filters
+        elif isinstance(filters, str):
             filters = [filters]
         
         figname = 'temps1.Simulation.plot_filter_performance'
@@ -383,7 +402,9 @@ class Simulation(npzload.NPZLoad):
         
         return fig
     
-    def plot_temporal_distribution(self, fname):
+    def plot_temporal_distribution(self, fname=None):
+        fname = self._fname(fname)
+        
         figname = 'temps1.Simulation.plot_temporal_distribution.' + fname.replace(" ", "_")
         fig, axs = plt.subplots(2, 1, num=figname, clear=True, figsize=[6.4, 7.19])
         axs[0].set_title(f'{fname.capitalize()} filter\nTemporal distribution of S1 candidates')
@@ -446,7 +467,9 @@ class Simulation(npzload.NPZLoad):
         
         return fig
 
-    def plot_filter_output_histogram(self, fname):
+    def plot_filter_output_histogram(self, fname=None):
+        fname = self._fname(fname)
+        
         figname = 'temps1.Simulation.plot_filter_output_histogram.'
         figname += fname.replace(' ', '_')
         fig, ax = plt.subplots(num=figname, clear=True)
