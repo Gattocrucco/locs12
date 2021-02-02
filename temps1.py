@@ -294,36 +294,38 @@ class Simulation(npzload.NPZLoad):
         
         return fig
     
-    def plot_filter_performance(self, fname):
-        figname = 'temps1.Simulation.plot_filter_performance.' + fname.replace(" ", "_")
+    def plot_filter_performance(self):
+        figname = 'temps1.Simulation.plot_filter_performance'
         fig, ax = plt.subplots(num=figname, clear=True)
-        ax.set_title(f'{fname.capitalize()} filter detection performance')
+        ax.set_title(f'Filter detection performance')
     
         ax.set_xlabel('S1 candidates per event')
         ax.set_ylabel('S1 loss probability')
         
-        f,   t   = self.candidates_above_threshold(fname, 'all', False)
-        fs1, ts1 = self.candidates_above_threshold(fname, 'all', True )
+        for fname in self.filtd['all'].dtype.names:
+            f,   t   = self.candidates_above_threshold(fname, 'all', False)
+            fs1, ts1 = self.candidates_above_threshold(fname, 'all', True )
         
-        sel = (ts1[0] <= t) & (t <= ts1[-1])
-        t = t[sel]
+            sel = (ts1[0] <= t) & (t <= ts1[-1])
+            t = t[sel]
     
-        s1cand = f(t)
-        s1prob = 1 - fs1(t)
+            s1cand = f(t)
+            s1prob = 1 - fs1(t)
     
-        ax.plot(s1cand, s1prob)
-        textbox.textbox(ax, self.infotext())
+            ax.plot(s1cand, s1prob, label=fname.capitalize() + ' filter')
+            textbox.textbox(ax, self.infotext())
 
-        ax.minorticks_on()
-        ax.set_xscale('log')
-        ax.set_yscale('log')
-        ax.grid(True, which='major', linestyle='--')
-        ax.grid(True, which='minor', linestyle=':')
-        l, r = ax.get_xlim()
-        ax.set_xlim(max(0.1, l), r)
-        b, _ = ax.get_ylim()
-        ax.set_ylim(b, max(1, np.max(s1prob)))
-        autolinscale(ax)
+            ax.legend()
+            ax.minorticks_on()
+            ax.set_xscale('log')
+            ax.set_yscale('log')
+            ax.grid(True, which='major', linestyle='--')
+            ax.grid(True, which='minor', linestyle=':')
+            l, r = ax.get_xlim()
+            ax.set_xlim(max(0.1, l), r)
+            b, _ = ax.get_ylim()
+            ax.set_ylim(b, max(1, np.max(s1prob)))
+            autolinscale(ax)
         
         fig.tight_layout()
         
