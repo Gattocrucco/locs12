@@ -10,6 +10,8 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
 
 ## Modules
 
+  * `aligntwin.py`: code to align the ticks of multiple plot scales.
+
   * `ccdelta.py`: compute the cross-correlation of dicrete points with a
     continuous function.
 

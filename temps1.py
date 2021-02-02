@@ -449,13 +449,13 @@ class Simulation(npzload.NPZLoad):
 
         xnoise = self.values[fname]['dcr']
         counts, bins = np.histogram(xnoise, bins='auto')
-        counts = counts / (self.nmc * self.T_target * 1e-9)
-        linenoise, = ax.plot(bins, np.concatenate([counts, [0]]), color='#b00', **plotkw)
+        counts = counts / (self.nmc * self.T_sim * 1e-9)
+        linenoise, = ax.plot(np.concatenate([bins[:1], bins]), np.concatenate([[0], counts, [0]]), color='#b00', **plotkw)
 
         xsignal = self.values[fname]['all'][self.signal[fname]['all']]
         counts, bins = np.histogram(xsignal, bins='auto')
         counts = counts * 100 / len(xsignal)
-        linesig, = axr.plot(bins, np.concatenate([counts, [0]]), color='#0b0', linestyle='--', **plotkw)
+        linesig, = axr.plot(np.concatenate([bins[:1], bins]), np.concatenate([[0], counts, [0]]), color='#0b0', linestyle='--', **plotkw)
         
         textbox.textbox(axr, self.infotext(), loc='lower right')
 
