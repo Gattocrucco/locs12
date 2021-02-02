@@ -294,16 +294,21 @@ class Simulation(npzload.NPZLoad):
         
         return fig
     
-    def plot_filter_performance(self):
+    def plot_filter_performance(self, filters=None):
+        if filters is None:
+            filters = self.filtd['all'].dtype.names
+        if isinstance(filters, str):
+            filters = [filters]
+        
         figname = 'temps1.Simulation.plot_filter_performance'
         fig, ax = plt.subplots(num=figname, clear=True)
         ax.set_title(f'Filter detection performance')
     
-        ax.set_xlabel('S1 candidates per event')
-        ax.set_ylabel('S1 loss probability')
+        ax.set_xlabel('S1 candidates per no-S1 event')
+        ax.set_ylabel('S1 loss probability in S1 events')
         
-        for fname in self.filtd['all'].dtype.names:
-            f,   t   = self.candidates_above_threshold(fname, 'all', False)
+        for fname in filters:
+            f,   t   = self.candidates_above_threshold(fname, 'dcr', False)
             fs1, ts1 = self.candidates_above_threshold(fname, 'all', True )
         
             sel = (ts1[0] <= t) & (t <= ts1[-1])
@@ -313,19 +318,16 @@ class Simulation(npzload.NPZLoad):
             s1prob = 1 - fs1(t)
     
             ax.plot(s1cand, s1prob, label=fname.capitalize() + ' filter')
-            textbox.textbox(ax, self.infotext())
+        
+        textbox.textbox(ax, self.infotext(), loc='lower left')
 
-            ax.legend()
-            ax.minorticks_on()
-            ax.set_xscale('log')
-            ax.set_yscale('log')
-            ax.grid(True, which='major', linestyle='--')
-            ax.grid(True, which='minor', linestyle=':')
-            l, r = ax.get_xlim()
-            ax.set_xlim(max(0.1, l), r)
-            b, _ = ax.get_ylim()
-            ax.set_ylim(b, max(1, np.max(s1prob)))
-            autolinscale(ax)
+        ax.legend()
+        ax.minorticks_on()
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.grid(True, which='major', linestyle='--')
+        ax.grid(True, which='minor', linestyle=':')
+        autolinscale(ax)
         
         fig.tight_layout()
         
