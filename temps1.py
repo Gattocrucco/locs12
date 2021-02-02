@@ -145,9 +145,9 @@ class Simulation(npzload.NPZLoad):
         self.hitd = dict(s1=self.hits1, all=self.hitall, dcr=self.hitdcr)
         self.filtd = dict(s1=self.filts1, all=self.filtall, dcr=self.filtdcr)
         self.plotkw = {
-            's1' : dict(label='No DCR events'),
-            'all': dict(label='Single S1 events'),
-            'dcr': dict(label='No S1 events', linestyle='--'),
+            's1' : dict(label='One S1 events'),
+            'all': dict(label='DCR + one S1 events'),
+            'dcr': dict(label='DCR events', linestyle='--'),
         }
     
     def _merge_candidates(self):
@@ -181,7 +181,8 @@ class Simulation(npzload.NPZLoad):
         Return:
         x : dictionary photon series -> sorted 1D array of threshold values
         interp : dictionary photon series -> (function scalar -> scalar)
-        The function computes the number of candidates below a threshold.
+        The function computes the number of candidates below a threshold,
+        per event.
         The x threshold values are points where the function goes down by one
         step.
         """
@@ -216,7 +217,7 @@ class Simulation(npzload.NPZLoad):
         
         return x, interp
         
-    def candidates_above_threshold(self, fname, hits, signalonly=False):
+    def candidates_above_threshold(self, fname, hits, signalonly=False, rate=False):
         """
         Return a function to compute the number of candidates above a given
         threshold, and the array of thresholds where the function has steps.
@@ -231,12 +232,15 @@ class Simulation(npzload.NPZLoad):
         signalonly : bool
             Default False. If True, count only true S1 signals. An error is
             raised if hits='dcr' and signalonly=True.
+        rate : bool
+            If True, compute the candidates per unit time (second) instead of
+            per event. Default False.
         
         Return
         ------
         f : function scalar -> scalar
             A decreasing step function that maps a threshold to the number of
-            candidates with filter output value >= that threshold.
+            candidates per event with filter output value >= that threshold.
         t : sorted 1D array
             The thresholds where f has steps.
         """
@@ -248,22 +252,34 @@ class Simulation(npzload.NPZLoad):
                 fname: self._counts_interp(fname, signalonly)
                 for fname in self.values
             })
+        
         x, interp = getattr(self, cache)[fname]
-        return interp[hits], x[hits]
+        x = x[hits]
+        interp = interp[hits]
+        
+        if rate:
+            factor = 1 / (self.T_target * 1e-9)
+            interp0 = interp
+            interp = lambda t: factor * interp0(t)
+        
+        return interp, x
         
     def plot_filter_performance_threshold(self, fname):
         figname = 'temps1.Simulation.plot_filter_performance_threshold.' + fname.replace(" ", "_")
         fig, axs = plt.subplots(2, 1, num=figname, figsize=[6.4, 7.19], clear=True, sharex=True)
-        axs[0].set_title(f'{fname.capitalize()} filter detection performance\n(with explicit threshold)')
+        axs[0].set_title(f'{fname.capitalize()} filter detection performance')
     
         ax = axs[0]
-        ax.set_ylabel('Mean number of S1 candidates per event')
+        ax.set_ylabel('Rate of S1 candidates [s$^{-1}$]')
         
         for k in ['all', 'dcr']:
-            f, t = self.candidates_above_threshold(fname, k)
+            f, t = self.candidates_above_threshold(fname, k, rate=True)
             x = np.concatenate([t, t[-1:]])
             y = np.concatenate([f(t), [0]])
             ax.plot(x, y, drawstyle='steps-pre', **self.plotkw[k])
+        
+        rate1 = 1 / (self.T_target * 1e-9)
+        ax.axhspan(0, rate1, color='#ddd', label='$\\leq$ 1 cand. per event')
     
         if fname == 'sample mode':
             ax.set_xscale('log')
@@ -304,12 +320,12 @@ class Simulation(npzload.NPZLoad):
         fig, ax = plt.subplots(num=figname, clear=True)
         ax.set_title(f'Filter detection performance')
     
-        ax.set_xlabel('S1 candidates per no-S1 event')
-        ax.set_ylabel('S1 loss probability in S1 events')
+        ax.set_xlabel('Rate of S1 candidates in DCR [s$^{-1}$]')
+        ax.set_ylabel('S1 loss probability')
         
         for fname in filters:
-            f,   t   = self.candidates_above_threshold(fname, 'dcr', False)
-            fs1, ts1 = self.candidates_above_threshold(fname, 'all', True )
+            f,   t   = self.candidates_above_threshold(fname, 'dcr', signalonly=False, rate=True )
+            fs1, ts1 = self.candidates_above_threshold(fname, 'all', signalonly=True , rate=False)
         
             sel = (ts1[0] <= t) & (t <= ts1[-1])
             t = t[sel]
