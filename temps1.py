@@ -252,7 +252,7 @@ class Simulation(npzload.NPZLoad):
         return interp[hits], x[hits]
         
     def plot_filter_performance_threshold(self, fname):
-        figname = 'temps1.Simulation.' + fname.replace(" ", "_")
+        figname = 'temps1.Simulation.plot_filter_performance_threshold.' + fname.replace(" ", "_")
         fig, axs = plt.subplots(2, 1, num=figname, figsize=[6.4, 7.19], clear=True, sharex=True)
         axs[0].set_title(f'{fname.capitalize()} filter detection performance\n(with explicit threshold)')
     
@@ -295,7 +295,7 @@ class Simulation(npzload.NPZLoad):
         return fig
     
     def plot_filter_performance(self, fname):
-        figname = 'temps1.Simulation.' + fname.replace(" ", "_") + '_combined'
+        figname = 'temps1.Simulation.plot_filter_performance.' + fname.replace(" ", "_")
         fig, ax = plt.subplots(num=figname, clear=True)
         ax.set_title(f'{fname.capitalize()} filter detection performance')
     
@@ -330,7 +330,7 @@ class Simulation(npzload.NPZLoad):
         return fig
     
     def plot_temporal_distribution(self, fname):
-        figname = 'temps1.Simulation.' + fname.replace(" ", "_") + '_time'
+        figname = 'temps1.Simulation.plot_temporal_distribution.' + fname.replace(" ", "_")
         fig, axs = plt.subplots(2, 1, num=figname, clear=True, figsize=[6.4, 7.19])
         axs[0].set_title(f'{fname.capitalize()} filter\nTemporal distribution of S1 candidates')
     
