@@ -12,6 +12,7 @@ import textbox
 import qsigma
 import symloglocator
 import npzload
+import aligntwin
 
 def clustersort(time, value, deadradius):
     """
@@ -312,8 +313,6 @@ class Simulation(npzload.NPZLoad):
         rate1 = 1 / (self.T_target * 1e-9)
         ax.axhspan(0, rate1, color='#ddd', label='$\\leq$ 1 cand. per event')
     
-        if fname == 'sample mode':
-            ax.set_xscale('log')
         ax.set_yscale('log')
         ax.minorticks_on()
         ax.grid(True, which='major', linestyle='--')
@@ -431,6 +430,45 @@ class Simulation(npzload.NPZLoad):
         ax.grid(True, which='major', linestyle='--')
         ax.grid(True, which='minor', linestyle=':')
 
+        fig.tight_layout()
+        
+        return fig
+
+    def plot_filter_output_histogram(self, fname):
+        figname = 'temps1.Simulation.plot_filter_output_histogram'
+        fig, ax = plt.subplots(num=figname, clear=True)
+        axr = ax.twinx()
+
+        ax.set_title(fname.capitalize() + ' filter output distribution')
+    
+        ax.set_xlabel('Filter output value')
+        ax.set_ylabel('Rate per bin [s$^{-1}$]')
+        axr.set_ylabel('Fraction of S1 per bin [%]')
+        
+        plotkw = dict(drawstyle='steps-post')
+
+        xnoise = self.values[fname]['dcr']
+        counts, bins = np.histogram(xnoise, bins='auto')
+        counts = counts / (self.nmc * self.T_target * 1e-9)
+        linenoise, = ax.plot(bins, np.concatenate([counts, [0]]), color='#b00', **plotkw)
+
+        xsignal = self.values[fname]['all'][self.signal[fname]['all']]
+        counts, bins = np.histogram(xsignal, bins='auto')
+        counts = counts * 100 / len(xsignal)
+        linesig, = axr.plot(bins, np.concatenate([counts, [0]]), color='#0b0', linestyle='--', **plotkw)
+        
+        textbox.textbox(axr, self.infotext(), loc='lower right')
+
+        axr.legend([linenoise, linesig], ['DCR events (left scale)', 'S1 in DCR + one S1 events (right scale)'])
+        
+        ax.minorticks_on()
+        axr.minorticks_on()
+        aligntwin.alignYaxes([ax, axr], [0, 0])
+        ax.set_ylim(0, ax.get_ylim()[1])
+        axr.set_ylim(0, axr.get_ylim()[1])
+        ax.grid(True, which='major', linestyle='--')
+        ax.grid(True, which='minor', linestyle=':')
+        
         fig.tight_layout()
         
         return fig

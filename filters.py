@@ -13,7 +13,8 @@ import dcr
 
 def filter_sample_mode(thit):
     """
-    Compute the inverse of the time interval between consecutive hits.
+    Compute the logarithm of the inverse of the time interval between
+    consecutive hits.
     
     Parameters
     ----------
@@ -26,7 +27,7 @@ def filter_sample_mode(thit):
         The filter output, computed at the central point between consecutive
         hits.
     """
-    return 1 / np.diff(thit, axis=-1)
+    return -np.log(np.diff(thit, axis=-1))
 
 def filter_cross_correlation(thit, tout, fun, left, right):
     """

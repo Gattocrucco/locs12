@@ -8,7 +8,7 @@ def textbox(ax, text, loc='lower left', **kw):
         The plot where the text box is drawn.
     text : str
         The text.
-    loc : {'lower left', 'upper left'}
+    loc : {'lower left', 'upper left', 'lower right'}
         The location of the box.
     
     Keyword arguments
@@ -19,14 +19,18 @@ def textbox(ax, text, loc='lower left', **kw):
     ------
     The return value is that from ax.annotate.
     """
+    
+    # TODO update dictionaries in kwargs with dictionaries in kw? for bbox
+    # (only if both are dictionaries, to allow deletion)
+    
     M = 8
     locparams = {
-        'lower left': dict(xy=(0, 0), xytext=(M,  M), va='bottom'),
-        'upper left': dict(xy=(0, 1), xytext=(M, -M), va='top')
+        'lower left' : dict(xy=(0, 0), xytext=( M,  M), va='bottom', ha='left' ),
+        'upper left' : dict(xy=(0, 1), xytext=( M, -M), va='top'   , ha='left' ),
+        'lower right': dict(xy=(1, 0), xytext=(-M,  M), va='bottom', ha='right'),
     }
     
     kwargs = dict(
-        ha='left',
         fontsize='x-small',
         xycoords='axes fraction',
         textcoords='offset points',
