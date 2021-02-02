@@ -120,8 +120,8 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
     
     out = np.empty(len(hits), dtype=[
         (filter_name, [
-            ('time', float, length[filter_name]),
-            ('value', float, length[filter_name])
+            ('time', float, (length[filter_name],)),
+            ('value', float, (length[filter_name],))
         ]) for filter_name in which
     ])
     
@@ -129,7 +129,8 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
     all_out = out
     
     offset = pS1.p_S1_gauss_maximum(VL, tauV, tauL, tres)
-    fun = numba.njit('f8(f8)')(lambda t: pS1.p_S1_gauss(t - offset, VL, tauV, tauL, tres))
+    ampl = pS1.p_S1_gauss(offset, VL, tauV, tauL, tres)
+    fun = numba.njit('f8(f8)')(lambda t: pS1.p_S1_gauss(t - offset, VL, tauV, tauL, tres) / ampl)
     left = -5 * tres
     right = 10 * tauL
 

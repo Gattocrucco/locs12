@@ -20,7 +20,7 @@ def ccdelta(f, t, tout, left, right, w=None):
         The support of f. f is assumed to be zero outside of it and not
         evaluated.
     w : array (..., N), optional
-        The amplitudes of deltas. If not provided they are set to 1/N.
+        The amplitudes of deltas. If not provided they are set to 1.
     
     Return
     ------
@@ -38,7 +38,7 @@ def ccdelta(f, t, tout, left, right, w=None):
     assert np.isscalar(left)
     assert np.isscalar(right)
     if w is None:
-        w = np.broadcast_to(np.array([1 / t.shape[-1]]), t.shape[-1:])
+        w = np.broadcast_to(np.ones(1), t.shape[-1:])
     w = np.asarray(w)
     assert len(w.shape) >= 1
     assert w.shape[-1] == t.shape[-1]

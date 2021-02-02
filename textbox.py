@@ -28,6 +28,7 @@ def textbox(ax, text, loc='lower left', **kw):
         'lower left' : dict(xy=(0, 0), xytext=( M,  M), va='bottom', ha='left' ),
         'upper left' : dict(xy=(0, 1), xytext=( M, -M), va='top'   , ha='left' ),
         'lower right': dict(xy=(1, 0), xytext=(-M,  M), va='bottom', ha='right'),
+        'upper right': dict(xy=(1, 1), xytext=(-M, -M), va='top'   , ha='right'),
     }
     
     kwargs = dict(
@@ -36,8 +37,8 @@ def textbox(ax, text, loc='lower left', **kw):
         textcoords='offset points',
         bbox=dict(
             facecolor='white',
-            alpha=0.5,
-            edgecolor='gray',
+            alpha=0.75,
+            edgecolor='#ccc',
             boxstyle='round'
         ),
     )

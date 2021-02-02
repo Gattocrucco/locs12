@@ -60,6 +60,9 @@ def autolinscale(ax, xratio=20, yratio=20):
         ax.set_yscale('linear')
         ax.set_ylim(0, h)
 
+def plot_histogram(ax, counts, bins, **kw):
+    return ax.plot(np.concatenate([bins[:1], bins]), np.concatenate([[0], counts, [0]]), drawstyle='steps-post', **kw)
+
 class Simulation(npzload.NPZLoad):
     
     def __init__(self,
@@ -146,9 +149,9 @@ class Simulation(npzload.NPZLoad):
         self.hitd = dict(s1=self.hits1, all=self.hitall, dcr=self.hitdcr)
         self.filtd = dict(s1=self.filts1, all=self.filtall, dcr=self.filtdcr)
         self.plotkw = {
-            's1' : dict(label='One S1 events'),
-            'all': dict(label='DCR + one S1 events'),
-            'dcr': dict(label='DCR events', linestyle='--'),
+            's1' : dict(label='One S1 events', linestyle=':', color='#0b0'),
+            'all': dict(label='DCR + one S1 events', color='#00b'),
+            'dcr': dict(label='DCR events', linestyle='--', color='#b00'),
         }
     
     def _merge_candidates(self):
@@ -265,7 +268,7 @@ class Simulation(npzload.NPZLoad):
         
         return interp, x
     
-    def efficiency_vs_rate(self, fname):
+    def efficiency_vs_rate(self, fname, signalhits='all'):
         """
         Give a function to compute the S1 detection efficiency given the rate
         of fake S1 in noise photons.
@@ -274,6 +277,8 @@ class Simulation(npzload.NPZLoad):
         ----------
         fname : str
             The filter to use.
+        signalhits : {'all', 's1'}
+            Whether to count signals within noise or alone.
         
         Return
         ------
@@ -282,8 +287,8 @@ class Simulation(npzload.NPZLoad):
         r : sorted 1D array
             The rates where f changes slope.
         """
-        f,   t   = self.candidates_above_threshold(fname, 'dcr', signalonly=False, rate=True )
-        fs1, ts1 = self.candidates_above_threshold(fname, 'all', signalonly=True , rate=False)
+        f,   t   = self.candidates_above_threshold(fname, 'dcr'     , signalonly=False, rate=True )
+        fs1, ts1 = self.candidates_above_threshold(fname, signalhits, signalonly=True , rate=False)
         
         sel = (ts1[0] <= t) & (t <= ts1[-1])
         t = t[sel]
@@ -304,7 +309,7 @@ class Simulation(npzload.NPZLoad):
         ax = axs[0]
         ax.set_ylabel('Rate of S1 candidates [s$^{-1}$]')
         
-        for k in ['all', 'dcr']:
+        for k in ['all', 'dcr', 's1']:
             f, t = self.candidates_above_threshold(fname, k, rate=True)
             x = np.concatenate([t, t[-1:]])
             y = np.concatenate([f(t), [0]])
@@ -323,11 +328,12 @@ class Simulation(npzload.NPZLoad):
         ax = axs[1]
         ax.set_ylabel('True S1 detection probability')
         ax.set_xlabel('Threshold on filter output')
-    
-        f, t = self.candidates_above_threshold(fname, 'all', True)
-        x = np.concatenate([t, t[-1:]])
-        y = np.concatenate([f(t), [0]])
-        ax.plot(x, y, drawstyle='steps-pre')
+        
+        for k in ['all', 's1']:
+            f, t = self.candidates_above_threshold(fname, k, signalonly=True)
+            x = np.concatenate([t, t[-1:]])
+            y = np.concatenate([f(t), [0]])
+            ax.plot(x, y, drawstyle='steps-pre', **self.plotkw[k])
 
         textbox.textbox(ax, self.infotext())
     
@@ -353,13 +359,19 @@ class Simulation(npzload.NPZLoad):
         ax.set_xlabel('Rate of S1 candidates in DC photons [s$^{-1}$]')
         ax.set_ylabel('S1 loss probability')
         
-        for fname in filters:
-            f, r = self.efficiency_vs_rate(fname)
-            ax.plot(r, 1 - f(r), label=fname.capitalize() + ' filter')
+        prop_cycle = plt.rcParams['axes.prop_cycle']
+        colors = prop_cycle.by_key()['color']
+        
+        for fname, color in zip(filters, colors):
+            for k in ['all', 's1']:
+                f, r = self.efficiency_vs_rate(fname, k)
+                kw = dict(self.plotkw[k])
+                kw.update(color=color, label=fname.capitalize() + ' filter, ' + kw['label'])
+                ax.plot(r, 1 - f(r), **kw)
         
         textbox.textbox(ax, self.infotext(), loc='lower left')
 
-        ax.legend()
+        ax.legend(loc='upper right', fontsize='small')
         ax.minorticks_on()
         ax.set_xscale('log')
         ax.set_yscale('log')
@@ -435,7 +447,8 @@ class Simulation(npzload.NPZLoad):
         return fig
 
     def plot_filter_output_histogram(self, fname):
-        figname = 'temps1.Simulation.plot_filter_output_histogram'
+        figname = 'temps1.Simulation.plot_filter_output_histogram.'
+        figname += fname.replace(' ', '_')
         fig, ax = plt.subplots(num=figname, clear=True)
         axr = ax.twinx()
 
@@ -445,21 +458,33 @@ class Simulation(npzload.NPZLoad):
         ax.set_ylabel('Rate per bin [s$^{-1}$]')
         axr.set_ylabel('Fraction of S1 per bin [%]')
         
-        plotkw = dict(drawstyle='steps-post')
-
-        xnoise = self.values[fname]['dcr']
-        counts, bins = np.histogram(xnoise, bins='auto')
+        x = self.values[fname]['dcr']
+        counts, bins = np.histogram(x, bins='auto')
         counts = counts / (self.nmc * self.T_sim * 1e-9)
-        linenoise, = ax.plot(np.concatenate([bins[:1], bins]), np.concatenate([[0], counts, [0]]), color='#b00', **plotkw)
+        linenoise, = plot_histogram(ax, counts, bins, **self.plotkw['dcr'])
 
-        xsignal = self.values[fname]['all'][self.signal[fname]['all']]
-        counts, bins = np.histogram(xsignal, bins='auto')
-        counts = counts * 100 / len(xsignal)
-        linesig, = axr.plot(np.concatenate([bins[:1], bins]), np.concatenate([[0], counts, [0]]), color='#0b0', linestyle='--', **plotkw)
+        x = self.values[fname]['s1'][self.signal[fname]['s1']]
+        counts, bins = np.histogram(x, bins='auto')
+        counts = counts * 100 / len(x)
+        linesigpure, = plot_histogram(axr, counts, bins, **self.plotkw['s1'])
+        N = len(x)
         
-        textbox.textbox(axr, self.infotext(), loc='lower right')
+        x = self.values[fname]['all'][self.signal[fname]['all']]
+        counts, bins = np.histogram(x, bins='auto')
+        counts = counts * 100 / N
+        linesig, = plot_histogram(axr, counts, bins, **self.plotkw['all'])
+        
+        textbox.textbox(axr, self.infotext(), loc='upper right')
 
-        axr.legend([linenoise, linesig], ['DCR events (left scale)', 'S1 in DCR + one S1 events (right scale)'])
+        axr.legend([
+            linenoise,
+            linesigpure,
+            linesig,
+        ], [
+            'Fake rate (left scale)',
+            'Signal % (right scale)',
+            'Signal within noise (relative)',
+        ], loc='upper left')
         
         ax.minorticks_on()
         axr.minorticks_on()
