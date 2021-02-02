@@ -18,6 +18,8 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
 
   * `dcr.py`: generate uniform hits.
   
+  * `downcast.py`: downcast numpy data types recursively.
+  
   * `filters.py`: filters to be applied to a temporal sequence of hits.
   
   * `named_cartesian_product.py`: cartesian product of arrays.
