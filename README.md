@@ -8,6 +8,10 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
     temporal localization filters with the version of `temps1.py` from January
     31, 2021.
 
+  * `temps1plots20210203.py`: save performance and diagnostic plots of s1
+    temporal localization filters with the version of `temps1.py` from February
+    3, 2021.
+
 ## Modules
 
   * `aligntwin.py`: code to align the ticks of multiple plot scales.
