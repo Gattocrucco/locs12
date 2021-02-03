@@ -1,6 +1,9 @@
 import numpy as np
 
 def named_cartesian_product(**fields):
+    # TODO for completeness, add *args to do an unnamed cartesian product.
+    # Only one of *args, **fields can be non-empty.
+    
     fields = {k: np.asarray(v) for k, v in fields.items()}
     
     shape = sum((array.shape for array in fields.values()), start=())

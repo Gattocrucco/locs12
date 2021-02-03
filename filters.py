@@ -114,7 +114,7 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
     
     length = {}
     length['sample mode'] = hits.shape[1] - 1
-    nt = (hits.shape[1] - 1) * (midpoints + 1)
+    nt = (hits.shape[1] - 1) * (midpoints + 1) + 1
     length['cross correlation'] = nt
     length['sample mode cross correlation'] = nt
     
@@ -146,9 +146,13 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
             v = filter_sample_mode(hits)
             t = (hits[:, 1:] + hits[:, :-1]) / 2
             timevalue['sample mode'] = (t, v)
-    
-        t = hits[:, :-1, None] + np.arange(midpoints + 1) / (midpoints + 1) * np.diff(hits, axis=-1)[:, :, None]
-        t = t.reshape(hits.shape[0], (hits.shape[1] - 1) * (midpoints + 1))
+        
+        if midpoints == 0:
+            t = hits
+        else:
+            t = hits[:, :-1, None] + np.arange(midpoints + 1) / (midpoints + 1) * np.diff(hits, axis=-1)[:, :, None]
+            t = t.reshape(hits.shape[0], (hits.shape[1] - 1) * (midpoints + 1))
+            t = np.concatenate([t, hits[:, -1:]], axis=-1)
     
         if 'cross correlation' in which:
             v = filter_cross_correlation(hits, t, fun, left, right)
