@@ -54,3 +54,9 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
   * `temps1.py`: simulate the temporal localization of S1 signals.
   
   * `textbox.py`: draw a box with text on a plot.
+
+## Dependencies
+
+Should work with Python >= 3.6 and the standard Python scientific stack. Just
+in case: developed on Python 3.8.2, required modules with version numbers are
+listed in `requirements.txt`.
