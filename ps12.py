@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 import numba
 
 import numba_scipy_special
+import sampling_bounds
 
 def pexp(t, tau):
     """
@@ -124,6 +125,21 @@ def ps2gaussmax(p1, tau1, tau2, T, sigma):
     assert -sigma <= result.x <= T + sigma
     return result.x
 
+def ps12range(p1, tau1, tau2, T, sigma, nsamples=1, p=0.01):
+    """
+    Return an interval (left, right) that approximately will contain all the
+    samples from ps2gauss with probability `p` if `nsamples` samples are drawn.
+    """
+    left, _ = sampling_bounds.sampling_bounds('norm', nsamples, p)
+    left *= sigma
+    
+    neff = nsamples * (p1 if tau1 > tau2 else 1 - p1)
+    _, right = sampling_bounds.sampling_bounds('expon', neff, p)
+    right *= max(tau1, tau2)
+    right += T
+    
+    return left, right
+
 def gens12(size, p1, tau1, tau2, T, sigma, generator=None):
     """
     Draw samples from ps2gauss. In particular if T = 0 the distribution is
@@ -181,7 +197,7 @@ def check_ps1(p1=0.75, tau1=7, tau2=1600, sigma=10):
     yc2 = np.exp(logps1gauss(t, p1, tau1, tau2, sigma))
     y2 = ps2gauss(t, p1, tau1, tau2, min(tau1, tau2, sigma) / 100, sigma)
     yg = pgauss(t, sigma)
-    
+        
     mx = ps1gaussmax(p1, tau1, tau2, sigma)
     my = ps1gauss(mx, p1, tau1, tau2, sigma)
     
@@ -250,15 +266,19 @@ def check_gens1(p1=0.75, tau1=10, tau2=100, sigma=5):
 
     gen = np.random.default_rng(202012181733)
     s = gens12(100000, p1, tau1, tau2, 0, sigma, gen)
-    left, right = np.quantile(s, [0.001, 0.999])
-    s = s[(s >= left) & (s <= right)]
+    # left, right = np.quantile(s, [0.001, 0.999])
+    # s = s[(s >= left) & (s <= right)]
     
-    ax.hist(s, bins='auto', histtype='step', density=True, label='samples histogram')
+    ax.hist(s, bins='auto', histtype='step', density=True, label='samples histogram', zorder=2)
     
     t = np.linspace(np.min(s), np.max(s), 1000)
     y = ps1gauss(t, p1, tau1, tau2, sigma)
     
     ax.plot(t, y, label='pdf')
+    
+    p = 0.1
+    l, r = ps12range(p1, tau1, tau2, 0, sigma, nsamples=len(s), p=p)
+    ax.axvspan(l, r, color='#ddd', label=f'{p * 100:.2g} % bounds')
     
     ax.legend(loc='best')
     ax.set_yscale('log')
@@ -283,15 +303,17 @@ def check_gens2(p1=0.1, tau1=11, tau2=3200, T=15000, sigma=1000):
 
     gen = np.random.default_rng(202012181733)
     s = gens12(100000, p1, tau1, tau2, T, sigma, gen)
-    left, right = np.quantile(s, [0.001, 0.999])
-    s = s[(s >= left) & (s <= right)]
     
-    ax.hist(s, bins='auto', histtype='step', density=True, label='samples histogram')
+    ax.hist(s, bins='auto', histtype='step', density=True, label='samples histogram', zorder=2)
     
     t = np.linspace(np.min(s), np.max(s), 1000)
     y = ps2gauss(t, p1, tau1, tau2, T, sigma)
     
     ax.plot(t, y, label='pdf')
+    
+    p = 0.1
+    l, r = ps12range(p1, tau1, tau2, T, sigma, nsamples=len(s), p=p)
+    ax.axvspan(l, r, color='#ddd', label=f'{p * 100:.2g} % bounds')
     
     ax.legend(loc='best')
     ax.minorticks_on()
