@@ -1,5 +1,8 @@
 import numpy as np
 
+# TODO put the downcasting condition in its own function, write an upcast
+# function, share the code using an internal function with a boolean parameter.
+
 def downcast(dtype, *shorttypes):
     """
     Downcast a numpy data type, in the sense of converting it to a similar type
