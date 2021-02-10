@@ -167,8 +167,6 @@ def gens12(size, p1, tau1, tau2, T, sigma, generator=None):
     choice = generator.binomial(n=1, p=p1, size=size).astype(bool)
     samp[choice] *= tau1
     samp[~choice] *= tau2
-    # alternative: generate # of tau1, tau2 with binomial on the total,
-    # multiply by tau2, tau1, then use generator.shuffle()
     
     if sigma != 0:
         normsamp = generator.standard_normal(size=size)
@@ -258,7 +256,7 @@ def check_gens1(p1=0.75, tau1=10, tau2=100, sigma=5):
     """
     Check gens12 with T = 0.
     """
-    fig, ax = plt.subplots(num='pS1.check_gens1', clear=True)
+    fig, ax = plt.subplots(num='ps12.check_gens1', clear=True)
     
     ax.set_title('Time distribution of S1 photons')
     ax.set_xlabel('Time [ns]')
@@ -295,7 +293,7 @@ def check_gens2(p1=0.1, tau1=11, tau2=3200, T=15000, sigma=1000):
     """
     Check gens2 with T != 0.
     """
-    fig, ax = plt.subplots(num='pS1.check_gens2', clear=True)
+    fig, ax = plt.subplots(num='ps12.check_gens2', clear=True)
     
     ax.set_title('Time distribution of S2 photons')
     ax.set_xlabel('Time [ns]')

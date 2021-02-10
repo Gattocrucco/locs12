@@ -81,6 +81,14 @@ def filter_sample_mode_cross_correlation(thit, tout, fun, left, right):
     center = (thit[:, 1:] + thit[:, :-1]) / 2
     return ccdelta.ccdelta(fun, center, tout, left, right, w=density)
 
+def addmidpoints(hits, midpoints):
+    if midpoints == 0:
+        return hits
+    t = hits[:, :-1, None] + np.arange(midpoints + 1) / (midpoints + 1) * np.diff(hits, axis=-1)[:, :, None]
+    t = t.reshape(hits.shape[0], (hits.shape[1] - 1) * (midpoints + 1))
+    t = np.concatenate([t, hits[:, -1:]], axis=-1)
+    return t
+
 def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cross correlation'], pbar_batch=None):
     """
     Run filters on hit times.
@@ -130,7 +138,7 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
     
     offset = pS1.p_S1_gauss_maximum(VL, tauV, tauL, tres)
     ampl = pS1.p_S1_gauss(offset, VL, tauV, tauL, tres)
-    fun = numba.njit('f8(f8)')(lambda t: pS1.p_S1_gauss(t - offset, VL, tauV, tauL, tres) / ampl)
+    fun = numba.njit('f8(f8)')(lambda t: pS1.p_S1_gauss(t + offset, VL, tauV, tauL, tres) / ampl)
     left = -5 * tres
     right = 10 * tauL
 
@@ -147,12 +155,7 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
             t = (hits[:, 1:] + hits[:, :-1]) / 2
             timevalue['sample mode'] = (t, v)
         
-        if midpoints == 0:
-            t = hits
-        else:
-            t = hits[:, :-1, None] + np.arange(midpoints + 1) / (midpoints + 1) * np.diff(hits, axis=-1)[:, :, None]
-            t = t.reshape(hits.shape[0], (hits.shape[1] - 1) * (midpoints + 1))
-            t = np.concatenate([t, hits[:, -1:]], axis=-1)
+        t = addmidpoints(hits, midpoints)
     
         if 'cross correlation' in which:
             v = filter_cross_correlation(hits, t, fun, left, right)
