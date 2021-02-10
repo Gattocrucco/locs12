@@ -41,7 +41,11 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
   * `numba_scipy_special/`: module to add support for `scipy.special` functions 
     in numba.
 
-  * `pS1.py`: compute and sample the temporal distribution of S1 photons.
+  * `pS1.py`: (DEPRECATED) compute and sample the temporal distribution of S1
+    photons.
+  
+  * `ps12.py`: compute and sample the temporal distribution of S1 and S2
+    photons.
   
   * `qsigma.py`: equivalent of standard deviation with quantiles.
   
@@ -52,6 +56,9 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
   * `symloglocator.py`: class to place minor ticks on symlog scales.
   
   * `temps1.py`: simulate the temporal localization of S1 signals.
+  
+  * `testccfilter.py`: class to study where to evaluate the cross correlation
+    filter.
   
   * `textbox.py`: draw a box with text on a plot.
 

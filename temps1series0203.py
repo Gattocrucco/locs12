@@ -556,7 +556,7 @@ if __name__ == '__main__':
         nmc = 10000,
         pbar_batch = None,
     )
-    outfile = 'temps1series0203.npy'
+    outfile = 'temps1series0203-offsetbug.npy'
     
     ####################
     

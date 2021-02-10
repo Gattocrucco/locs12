@@ -12,10 +12,7 @@ ax.set_title('S1 efficiency at fixed fake rate')
 ax.set_xlabel('Number of S1 photons')
 ax.set_ylabel(f'Efficiency at fake rate {rate} s$^{{-1}}$')
 
-prop_cycle = plt.rcParams['axes.prop_cycle']
-colors = iter(prop_cycle.by_key()['color'])
-
-for i in np.ndindex(*table.shape[:-1]):
+for ii, i in enumerate(np.ndindex(*table.shape[:-1])):
     entries = table[i]
     entries = entries[entries['done']]
     if len(entries) == 0:
@@ -36,7 +33,7 @@ for i in np.ndindex(*table.shape[:-1]):
         for entry in entries
     ]
     
-    color = next(colors)
+    color = f'C{ii}'
     plotkw = {
         'color': color,
         'linestyle': ['-', '--'][i[0]],

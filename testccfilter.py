@@ -7,11 +7,11 @@ import pS1
 import dcr
 import filters
 import textbox
+import npzload
 
 def closenb(ref, nb, assume_sorted=False):
     """
-    Return the array of elements from nb which are the closest to each element
-    of ref.
+    Find the elements in nb which are the closest to each element of ref.
     
     Parameters
     ----------
@@ -43,9 +43,65 @@ def hist(ax, x, **kw):
     counts = counts / np.max(counts)
     return ax.plot(np.concatenate([bins[:1], bins]), np.concatenate([[0], counts, [0]]), drawstyle='steps-post', **kw)
 
-class TestCCFilter:
+class TestCCFilter(npzload.NPZLoad):
+    """
+    Class to study where to compute the cross correlation filter. The
+    description of the initialization parameters is in the code.
+    
+    Photon hits are simulated for a time nevents * T. Dark count photons are
+    populated with the specified rate. Each T interval contains one S1 signal.
+    The filter is evaluated on the whole sequence at steps of dt. Local maxima
+    are marked as peaks.
+    
+    The goal is to check if evaluating the filter only on hits and midpoints
+    between consecutive hits is sufficient to find the local maxima without
+    computing the whole filter output.
+    
+    Methods
+    -------
+    plotdist: plot distribution of peak alignment and missing height
+    eventswhere: find events with peaks satisfying a condition
+    plotevent: plot an event
+    save: save an instance as npz archive
+    
+    Class methods
+    -------------
+    load: load a saved object from file
+    
+    Properties
+    ----------
+    interp: function to compute interpolated filter output
+    info: human-readable description of simulation parameters
+    midpoints: number of midpoints between hits (mutable)
+    
+    Example
+    -------
+    >>> sim = TestCCFilter(nevents=100)                          
+    >>> sim.save('sim.npz')                                          
+    >>> sim2 = TestCCFilter.load('sim.npz')             
+    >>> sim2.plotdist().show()                                                
+    >>> sim2.eventswhere('hpeak - hhit > 0.06')                               
+    array([ 1, 64, 88, 96])
+    >>> sim2.plotevent(64, zoomsignal=True).show() 
+    >>> sim2.midpoints = 5 # try increasing the number of midpoints
+    >>> sim2.plotdist().show                                 
+    """
 
-    def __init__(self, nevents=1, nsignal=10, T=10000, rate=0.0025, VL=3, tauV=7, tauL=1600, tres=10, VLfilter=None, dt=1, offset=0, seed=None, midpoints=1):
+    def __init__(self,
+        nevents=1,      # number of events
+        nsignal=10,     # number of photons per S1
+        T=10000,        # (ns) length of event
+        rate=0.0025,    # (ns^-1) rate of dark count photons
+        VL=3,           # fast/slow ratio of S1
+        tauV=7,         # (ns) S1 fast tau
+        tauL=1600,      # (ns) S1 slow tau
+        tres=10,        # (ns) temporal resolution
+        VLfilter=None,  # fast/slow ratio of filter, default same as VL
+        dt=1,           # (ns) filter output sampling period
+        offset=0,       # (ns) template is transformed as f'(t) = f(t + offset)
+        seed=None,      # seed of random generator
+        midpoints=1     # number of points inserted between consecutive hits
+    ):
         if VLfilter is None:
             VLfilter = VL
     
@@ -61,10 +117,6 @@ class TestCCFilter:
         hitdcr = dcr.gen_DCR((), T * nevents, rate, generator)
     
         hits = np.sort(np.concatenate([hits1, hitdcr]))
-        taux = hits[:-1] + np.diff(hits) * np.arange(1, midpoints + 1)[:, None] / (midpoints + 1)
-        taux = taux.reshape(-1)
-        assert len(taux) == midpoints * (len(hits) - 1)
-        points = np.sort(np.concatenate([hits, taux]))
     
         mx = pS1.p_S1_gauss_maximum(VL, tauV, tauL, tres)
         ampl = pS1.p_S1_gauss(mx, VL, tauV, tauL, tres)
@@ -75,29 +127,23 @@ class TestCCFilter:
         t = np.arange(0, nevents * T, dt)
 
         v = filters.filter_cross_correlation(hits[None], t[None], fun, left, right)[0]
-        interp = interpolate.interp1d(t, v)
         pidx, _ = signal.find_peaks(v, height=0.2)
         tpeak = t[pidx]
         hpeak = v[pidx]
-        hidx = closenb(tpeak, points)
-        thit = points[hidx]
         
         signal_loc_eff = signal_loc + mx + offset
         s1idx = closenb(signal_loc_eff, tpeak)
         s1 = np.zeros(len(tpeak), bool)
         s1[s1idx] = True
         
-        self.hits1 = hits1      # S1 photons time
-        self.hitdcr = hitdcr    # dark count photons time
-        self.taux = taux        # additional times when the filter is evaluated
-        self.t = t              # time where the filter is evaluated
-        self.v = v              # filter output
-        self.interp = interp    # interpolation of filter output
-        self.tpeak = tpeak      # times of filter output peaks
-        self.hpeak = hpeak      # height of filter output peaks
-        self.thit = thit        # photons close to peaks
-        self.s1 = s1            # mask for S1 peaks
-        self.mx = mx            # point of maximum of p_S1_gauss
+        self.hits1 = hits1       # S1 photons time
+        self.hitdcr = hitdcr     # dark count photons time
+        self.t = t               # time where the filter is evaluated
+        self.v = v               # filter output
+        self.tpeak = tpeak       # times of filter output peaks
+        self.hpeak = hpeak       # height of filter output peaks
+        self.s1 = s1             # mask for S1 peaks
+        self.mx = mx             # point of maximum of p_S1_gauss
         self.signalloc = signal_loc_eff
         
         self.nevents = nevents
@@ -115,7 +161,34 @@ class TestCCFilter:
         self.midpoints = midpoints
     
     @property
+    def midpoints(self):
+        """
+        The number of midpoints between consecutive hits where the filter is
+        evaluated. This property can be changed at any time.
+        """
+        return self._midpoints
+    
+    @midpoints.setter
+    def midpoints(self, midpoints):
+        hits = np.sort(np.concatenate([self.hits1, self.hitdcr]))
+        taux = hits[:-1] + np.diff(hits) * np.arange(1, midpoints + 1)[:, None] / (midpoints + 1)
+        taux = taux.reshape(-1)
+        assert len(taux) == midpoints * (len(hits) - 1)
+        points = np.sort(np.concatenate([hits, taux]))
+    
+        hidx = closenb(self.tpeak, points)
+        thit = points[hidx]
+    
+        self.taux = taux    # additional times when the filter is evaluated
+        self.thit = thit    # photons or midpoints close to peaks
+        
+        self._midpoints = midpoints
+    
+    @property
     def info(self):
+        """
+        Human-readable description of simulation parameters.
+        """
         return f"""\
 nevents = {self.nevents}
 nsignal = {self.nsignal}
@@ -130,6 +203,13 @@ dt = {self.dt}
 offset = {self.mx:.2g} + {self.offset:.2g}
 seed = {self.seed}
 midpoints = {self.midpoints}"""
+
+    @property
+    def interp(self):
+        """
+        A linear interpolation of filter output.
+        """
+        return interpolate.interp1d(self.t, self.v, assume_sorted=True, copy=False)
     
     def eventswhere(self, cond, which='signal'):
         """
@@ -239,6 +319,14 @@ midpoints = {self.midpoints}"""
         return fig
     
     def plotdist(self):
+        """
+        Plot some distributions relevant to the problem.
+        
+        Return
+        ------
+        fig : matplotlib figure
+            The figure where the plot is drawn.
+        """
         fig, axs = plt.subplots(3, 1, num='testccfilter.TestCCFilter.plotdist', clear=True, figsize=[6.4, 7.19])
     
         axs[0].set_xlabel('Time from peak to closest neighbor')
