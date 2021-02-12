@@ -327,16 +327,15 @@ midpoints = {self.midpoints}"""
         fig : matplotlib figure
             The figure where the plot is drawn.
         """
-        fig, axs = plt.subplots(3, 1, num='testccfilter.TestCCFilter.plotdist', clear=True, figsize=[6.4, 7.19])
+        fig, axs = plt.subplots(2, 2, num='testccfilter.TestCCFilter.plotdist', clear=True, figsize=[8, 7], sharex='col')
     
-        axs[0].set_xlabel('Time from peak to closest neighbor')
-        axs[0].set_ylabel('Counts per bin [arb. un.]')
+        axs[0, 0].set_ylabel('Missing height to peak')
+        axs[1, 0].set_ylabel('Counts per bin [arb. un.]')
+        axs[1, 0].set_xlabel('Time from peak to closest neighbor')
 
-        axs[1].set_xlabel('Missing height to peak')
-        axs[1].set_ylabel('Peak height')
-    
-        axs[2].set_xlabel('Missing height to peak')
-        axs[2].set_ylabel('Counts per bin [arb. un.]')
+        axs[0, 1].set_ylabel('Peak height')
+        axs[1, 1].set_ylabel('Counts per bin [arb. un.]')
+        axs[1, 1].set_xlabel('Missing height to peak')
         
         selkw = [
             (~self.s1, dict(label='noise')),
@@ -344,15 +343,19 @@ midpoints = {self.midpoints}"""
         ]
     
         for sel, kw in selkw:
-            hist(axs[0], self.thit[sel] - self.tpeak[sel], **kw)
-            missing = self.hpeak[sel] - self.interp(self.thit[sel])
-            axs[1].plot(missing, self.hpeak[sel], '.', **kw)
-            hist(axs[2], missing, **kw)
+            time = self.thit[sel] - self.tpeak[sel]
+            height = self.hpeak[sel]
+            missing = height - self.interp(self.thit[sel])
+            axs[0, 0].plot(time, missing, '.', **kw)
+            hist(axs[1, 0], time, **kw)
+            axs[0, 1].plot(missing, height, '.', **kw)
+            hist(axs[1, 1], missing, **kw)
     
-        textbox.textbox(axs[0], self.info, loc='upper left', fontsize='x-small')
+        textbox.textbox(axs[1, 0], self.info, loc='upper left', fontsize='x-small')
 
-        for ax in axs:
-            ax.legend(loc='upper right', fontsize='medium')
+        for ax in axs.reshape(-1):
+            if ax.is_last_col():
+                ax.legend(loc='upper right', fontsize='medium')
             ax.minorticks_on()
             ax.grid(True, which='major', linestyle='--')
             ax.grid(True, which='minor', linestyle=':')
