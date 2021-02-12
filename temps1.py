@@ -3,6 +3,7 @@ import collections
 import numpy as np
 from scipy import interpolate
 from matplotlib import pyplot as plt
+import numba
 
 import pS1
 import clusterargsort
@@ -14,34 +15,16 @@ import symloglocator
 import npzload
 import aligntwin
 
-def clustersort(time, value, deadradius):
+@numba.njit(cache=True)
+def argmin_sliced(x, indices):
     """
-    Given a series of filtered events, remove all points which are close to a
-    point with higher value, unless the latter has already been removed by an
-    even higher one.
-    
-    Parameters
-    ----------
-    time, value : array (nevents, npoints)
-        The filter output.
-    deadradius : scalar
-        The temporal distance to consider points as close.
-    
-    Return
-    ------
-    time, value : array (N,)
-        N <= nevents * npoints. The value array is sorted, with the time
-        array matching the correct points in the value array. All events are
-        merged together.
+    x is a 1d array. The argmin is done separately on each subarray
+    x[indices[i]:indices[i+1]]. The returned indices are for the whole x array.
     """
-    indices1, length = clusterargsort.clusterargsort(value, time, deadradius)
-    indices0 = np.repeat(np.arange(len(value)), np.diff(length))
-    
-    value = value[indices0, indices1]
-    time = time[indices0, indices1]
-    
-    idx = np.argsort(value)
-    return time[idx], value[idx]
+    out = np.empty(len(indices) - 1, np.intp)
+    for i in range(len(out)):
+        out[i] = indices[i] + np.argmin(x[indices[i]:indices[i + 1]])
+    return out
 
 def autolinscale(ax, xratio=20, yratio=20):
     """
@@ -66,21 +49,20 @@ def plot_histogram(ax, counts, bins, **kw):
 class Simulation(npzload.NPZLoad):
     
     def __init__(self,
-        DCR=250e-9,      # (ns^-1) Dark count rate per PDM, 25 or 250 Hz
+        DCR=250e-9,      # (ns^-1) Dark count rate per PDM
         VL=3,            # fast/slow ratio, ER=0.3, NR=3
         tauV=7,          # (ns) fast component tau
         tauL=1600,       # (ns) slow component tau
-        T_target=4e6,    # (ns) time window
-        T_sim=100e3,     # (ns) actually simulated time window
+        T=100e3,         # (ns) time per event
         npdm=8280,       # number of PDMs
-        nphotons=10,     # (2-100) number of photons in the S1 signal
-        tres=3,          # (ns) temporal resolution (3-10)
+        nphotons=10,     # number of photons in the S1 signal
+        tres=3,          # (ns) temporal resolution
         nmc=10,          # number of simulated events
-        deadradius=4000, # (ns) for selecting S1 candidates in filter output
-        matchdist=2000,  # (ns) for matching a S1 candidate to the true S1
+        deadradius=2000, # (ns) for selecting S1 candidates in filter output
         generator=None,  # numpy random generator, or integer seed
         pbar_batch=10,   # number of events for each progress bar step
-        filters=None,    # (list of) filters to use, default cross correlation
+        filters=None,    # (list of) filters to use, default ER/NR cross corr.
+        midpoints=3,     # no. of points between hits where the filter is eval.
     ):
         """
         Class to simulate S1 photons and DCR with temporal information only.
@@ -98,23 +80,22 @@ class Simulation(npzload.NPZLoad):
         self.VL = VL
         self.tauV = tauV
         self.tauL = tauL
-        self.T_target = T_target
-        self.T_sim = T_sim
+        self.T = T
         self.npdm = npdm
         self.nphotons = nphotons
         self.tres = tres
         self.nmc = nmc
         self.deadradius = deadradius
-        self.matchdist = matchdist
         self.pbar_batch = pbar_batch
         if filters is None:
-            filters = 'cross correlation'
+            filters = ['ER', 'NR']
         if isinstance(filters, str):
             filters = [filters]
         self.filters = np.array(filters)
+        self.midpoints = midpoints
         
         # Internal parameters.
-        self.s1loc = T_sim / 2
+        self.s1loc = T / 2
         self.hitnames = np.array(['s1', 'dcr', 'all'])
         
         # Run the simulation.
@@ -138,7 +119,7 @@ class Simulation(npzload.NPZLoad):
         variables.
         """
         self.hits1 = self.s1loc + pS1.gen_S1((self.nmc, self.nphotons), self.VL, self.tauV, self.tauL, self.tres, generator)
-        self.hitdcr = dcr.gen_DCR(self.nmc, self.T_sim, self.DCR * self.npdm, generator)
+        self.hitdcr = dcr.gen_DCR(self.nmc, self.T, self.DCR * self.npdm, generator)
         self.hitall = np.concatenate([self.hits1, self.hitdcr], axis=-1)
     
     def _run_filters(self):
@@ -148,7 +129,7 @@ class Simulation(npzload.NPZLoad):
         """
         for n in self.hitnames:
             hits = getattr(self, 'hit' + n)
-            kw = dict(midpoints=1, pbar_batch=self.pbar_batch, which=self.filters)
+            kw = dict(midpoints=self.midpoints, pbar_batch=self.pbar_batch, which=self.filters)
             f = filters.filters(hits, self.VL, self.tauV, self.tauL, self.tres, **kw)
             setattr(self, 'filt' + n, f)
     
@@ -177,12 +158,23 @@ class Simulation(npzload.NPZLoad):
                 time = fhits[fname]['time']
                 value = fhits[fname]['value']
                 
-                time, value = clustersort(time, value, self.deadradius)
-                match = np.abs(time - self.s1loc) < self.matchdist
+                indices1, length = clusterargsort.clusterargsort(value, time, self.deadradius)
+                indices0 = np.repeat(np.arange(len(value)), np.diff(length))
+    
+                value = value[indices0, indices1]
+                time = time[indices0, indices1]
                 
-                self.times[fname][k] = time
-                self.values[fname][k] = value
-                self.signal[fname][k] = match
+                timedelta = np.abs(time - self.s1loc)
+                minindices = argmin_sliced(timedelta, length)
+                signal = np.zeros(len(time), bool)
+                signal[minindices] = True
+                # this will count signals even in dcr, just don't use them
+    
+                idx = np.argsort(value)
+                
+                self.times[fname][k] = time[idx]
+                self.values[fname][k] = value[idx]
+                self.signal[fname][k] = signal[idx]
     
     def _counts_interp(self, fname, signal=False):
         """
@@ -216,16 +208,7 @@ class Simulation(npzload.NPZLoad):
             k: interpolate.interp1d(x[k], y[k], fill_value=(y[k][0], 0), **interpkw)
             for k in values
         }
-        
-        # Correct for T_sim < T_target.
-        if not signal:
-            x['all'] = np.sort(np.concatenate([x['all'], x['dcr']]))
-            fall = interp['all']
-            fdcr = interp['dcr']
-            ratio = self.T_target / self.T_sim
-            interp['dcr'] = lambda t: fdcr(t) * ratio
-            interp['all'] = lambda t: fall(t) + fdcr(t) * (ratio - 1)
-        
+                
         return x, interp
         
     def candidates_above_threshold(self, fname, hits, signalonly=False, rate=False):
@@ -269,7 +252,7 @@ class Simulation(npzload.NPZLoad):
         interp = interp[hits]
         
         if rate:
-            factor = 1 / (self.T_target * 1e-9)
+            factor = 1 / (self.T * 1e-9)
             interp0 = interp
             interp = lambda t: factor * interp0(t)
         
@@ -334,7 +317,7 @@ class Simulation(npzload.NPZLoad):
             y = np.concatenate([f(t), [0]])
             ax.plot(x, y, drawstyle='steps-pre', **self.plotkw[k])
         
-        rate1 = 1 / (self.T_target * 1e-9)
+        rate1 = 1 / (self.T * 1e-9)
         ax.axhspan(0, rate1, color='#ddd', label='$\\leq$ 1 cand. per event')
     
         ax.set_yscale('log')
@@ -422,10 +405,9 @@ class Simulation(npzload.NPZLoad):
             ax.plot(x, y, drawstyle='steps-post', **self.plotkw[k])
     
         ax.axvspan(-self.deadradius, self.deadradius, color='#eee', zorder=-9, label='$\\pm$ dead radius')
-        ax.axvspan(-self.matchdist,  self.matchdist,  color='#ccc', zorder=-8, label='$\\pm$ match dist.')
 
         ax.legend(loc='upper right')
-        ax.set_xlim(3.5 * max(2 * self.matchdist, self.deadradius) * np.array([-1, 1]))
+        ax.set_xlim(3.5 * self.deadradius * np.array([-1, 1]))
         ax.set_yscale('log')
         ax.minorticks_on()
         ax.grid(True, which='major', linestyle='--')
@@ -438,25 +420,23 @@ class Simulation(npzload.NPZLoad):
     
         times1 = self.hits1.reshape(-1) - self.s1loc               
         time = self.times[fname]['all'] - self.s1loc
-        time_match = time[np.abs(time) < self.matchdist]
-        idx = np.argsort(np.abs(time))
-        time_close = time[idx][:self.nmc]
+        signal = self.signal[fname]['all']
+        time_match = time[signal]
+        sigma = qsigma.qsigma(time_match)
     
         # t = np.linspace(..., ..., 1000)
         # ax.plot(t, pS1.p_S1_gauss(t, self.VL, self.tauV, self.tauL, self.tres), label='S1 pdf')
         histkw = dict(bins='auto', density=True, histtype='step', zorder=10)
         ax.hist(times1, label=f'S1 photons ({len(times1)})', linestyle=':', **histkw)
-        ax.hist(time_close, label=f'{self.nmc} closest candidates ($\\sigma_q$={qsigma.qsigma(time_close):.3g})', linestyle='--', **histkw)
-        ax.hist(time_match, label=f'matching candidates ($\\sigma_q$={qsigma.qsigma(time_match):.3g})', **histkw)
+        ax.hist(time_match, label=f'matching candidates ($\\sigma_q$={sigma:.3g})', **histkw)
     
         ax.axvspan(0, self.deadradius, color='#eee', zorder=-9, label='dead radius')
-        ax.axvspan(0,  self.matchdist, color='#ccc', zorder=-8, label='match dist.')
 
         textbox.textbox(ax, self.infotext(), loc='upper left', zorder=11)
     
         ax.legend(loc='upper right', fontsize='small')
         ax.set_yscale('log')
-        linthreshx = 10 ** np.ceil(np.log10(15 * qsigma.qsigma(time_match)))
+        linthreshx = 10 ** np.ceil(np.log10(15 * sigma))
         ax.set_xscale('symlog', linthreshx=linthreshx)
         ax.minorticks_on()
         ax.xaxis.set_minor_locator(symloglocator.MinorSymLogLocator(linthreshx))
@@ -483,7 +463,7 @@ class Simulation(npzload.NPZLoad):
         
         x = self.values[fname]['dcr']
         counts, bins = np.histogram(x, bins='auto')
-        counts = counts / (self.nmc * self.T_sim * 1e-9)
+        counts = counts / (self.nmc * self.T * 1e-9)
         linenoise, = plot_histogram(ax, counts, bins, **self.plotkw['dcr'])
 
         x = self.values[fname]['s1'][self.signal[fname]['s1']]
@@ -527,13 +507,12 @@ class Simulation(npzload.NPZLoad):
         parameters.
         """
         return f"""\
+nevents = {self.nmc}
+T = {self.T * 1e-6:.1f} ms
 total DCR = {self.DCR * self.npdm * 1e3:.2g} $\\mu$s$^{{-1}}$
-T (target) = {self.T_target * 1e-6:.1f} ms
-T (sim.) = {self.T_sim * 1e-6:.3f} ms
 fast/slow = {self.VL:.1f}
 nphotons = {self.nphotons}
 $\\tau$ = ({self.tauV:.1f}, {self.tauL:.0f}) ns
 temporal res. = {self.tres:.1f} ns
 dead radius = {self.deadradius:.0f} ns
-match dist. = {self.matchdist:.0f} ns
-nevents = {self.nmc}"""
+midpoints = {self.midpoints}"""

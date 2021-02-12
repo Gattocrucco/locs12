@@ -77,7 +77,7 @@ def filter_sample_mode_cross_correlation(thit, tout, fun, left, right):
     out : array (nevents, nout)
         The filter output.
     """
-    density = 1 / np.diff(thit, axis=-1)
+    density = -np.log(np.diff(thit, axis=-1))
     center = (thit[:, 1:] + thit[:, :-1]) / 2
     return ccdelta.ccdelta(fun, center, tout, left, right, w=density)
 
@@ -89,7 +89,7 @@ def addmidpoints(hits, midpoints):
     t = np.concatenate([t, hits[:, -1:]], axis=-1)
     return t
 
-def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cross correlation'], pbar_batch=None):
+def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cross correlation'], pbar_batch=None, VLER=0.3, VLNR=3):
     """
     Run filters on hit times.
     
@@ -97,18 +97,24 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
     ----------
     hits : array (nevents, nhits)
         The hit times. Need not be sorted.
-    VL, tauV, tauL, tres : scalar
-        p_S1_gauss parameters.
+    VL : scalar
+        VL p_S1_gauss parameter for the cross correlation filter.
+    tauV, tauL, tres : scalar
+        p_S1_gauss parameters for the cross correlation, ER and NR filters.
     midpoints : int
         The continuous filters are computed on the hits times but the last and
         on `midpoints` evenly spaced intermediate points between each hit.
     which : list of strings
         The filters to compute. Keywords:
-            'sample mode'
             'cross correlation'
+            'ER'
+            'NR'
+            'sample mode'
             'sample mode cross correlation'
     pbar_batch : int, optional
         If given, a progressbar is shown that ticks every `pbar_batch` events.
+    VLER, VLNR : scalar
+        VL p_S1_gauss parameter for the ER and NR filters.
     
     Return
     ------
@@ -124,6 +130,8 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
     length['sample mode'] = hits.shape[1] - 1
     nt = (hits.shape[1] - 1) * (midpoints + 1) + 1
     length['cross correlation'] = nt
+    length['ER'] = nt
+    length['NR'] = nt
     length['sample mode cross correlation'] = nt
     
     out = np.empty(len(hits), dtype=[
@@ -136,9 +144,12 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
     all_hits = hits
     all_out = out
     
-    offset = pS1.p_S1_gauss_maximum(VL, tauV, tauL, tres)
-    ampl = pS1.p_S1_gauss(offset, VL, tauV, tauL, tres)
-    fun = numba.njit('f8(f8)')(lambda t: pS1.p_S1_gauss(t + offset, VL, tauV, tauL, tres) / ampl)
+    template = dict()
+    for vl, f in [(VL, 'cross correlation'), (VLER, 'ER'), (VLNR, 'NR')]:
+        offset = pS1.p_S1_gauss_maximum(vl, tauV, tauL, tres)
+        ampl = pS1.p_S1_gauss(offset, vl, tauV, tauL, tres)
+        fun = lambda t: pS1.p_S1_gauss(t + offset, vl, tauV, tauL, tres) / ampl
+        template[f] = numba.njit('f8(f8)')(fun)
     left = -5 * tres
     right = 10 * tauL
 
@@ -157,11 +168,13 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
         
         t = addmidpoints(hits, midpoints)
     
-        if 'cross correlation' in which:
-            v = filter_cross_correlation(hits, t, fun, left, right)
-            timevalue['cross correlation'] = (t, v)
-    
+        for filt, fun in template.items():
+            if filt in which:
+                v = filter_cross_correlation(hits, t, fun, left, right)
+                timevalue[filt] = (t, v)
+        
         if 'sample mode cross correlation' in which:
+            fun = template['cross correlation']
             v = filter_sample_mode_cross_correlation(hits, t, fun, left, right)
             timevalue['sample mode cross correlation'] = (t, v)
     
