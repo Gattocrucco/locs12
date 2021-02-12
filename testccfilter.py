@@ -39,10 +39,50 @@ def closenb(ref, nb, assume_sorted=False):
     return np.where(ref - nbl < nbh - ref, posm1, pos)
 
 def hist(ax, x, **kw):
+    """
+    Plot a histogram of x on axis ax, with highest bin fixed to height 1.
+    Keyword arguments are passed to ax.plot.
+    """
     counts, bins = np.histogram(x, bins='auto')
     counts = counts / np.max(counts)
     return ax.plot(np.concatenate([bins[:1], bins]), np.concatenate([[0], counts, [0]]), drawstyle='steps-post', **kw)
 
+def parabola(v, idx):
+    """
+    Interpolate minima/maxima with a parabola.
+    
+    Parameters
+    ----------
+    v : array (N,)
+        Array of values at evenly spaced steps.
+    idx : array (M,)
+        Indices in v of local minima/maxima.
+    
+    Return
+    ------
+    dx : array (M,)
+        The position of the extrema, relative to the indices in idx, in unit
+        of 1 step.
+    dy : array (M,)
+        The height of the extrema relative to v[idx].
+    """
+    
+    x0 = idx
+    xp = np.minimum(x0 + 1, len(v))
+    xm = np.maximum(x0 - 1, 0)
+    
+    y0 = v[x0]
+    yp = v[xp]
+    ym = v[xm]
+    
+    num = yp - ym
+    denom = yp + ym - 2 * y0
+
+    dx = -1/2 * num / denom
+    dy = -1/8 * num ** 2 / denom
+    
+    return dx, dy
+    
 class TestCCFilter(npzload.NPZLoad):
     """
     Class to study where to compute the cross correlation filter. The
@@ -50,8 +90,8 @@ class TestCCFilter(npzload.NPZLoad):
     
     Photon hits are simulated for a time nevents * T. Dark count photons are
     populated with the specified rate. Each T interval contains one S1 signal.
-    The filter is evaluated on the whole sequence at steps of dt. Local maxima
-    are marked as peaks.
+    The filter is evaluated on the whole sequence at steps of dt and
+    interpolated quadratically. Local maxima are marked as peaks.
     
     The goal is to check if evaluating the filter only on hits and midpoints
     between consecutive hits is sufficient to find the local maxima without
@@ -125,11 +165,12 @@ class TestCCFilter(npzload.NPZLoad):
         right = 10 * tauL
     
         t = np.arange(0, nevents * T, dt)
-
         v = filters.filter_cross_correlation(hits[None], t[None], fun, left, right)[0]
+        
         pidx, _ = signal.find_peaks(v, height=0.2)
-        tpeak = t[pidx]
-        hpeak = v[pidx]
+        dx, dy = parabola(v, pidx)
+        tpeak = t[pidx] + dx * dt
+        hpeak = v[pidx] + dy
         
         signal_loc_eff = signal_loc + mx + offset
         s1idx = closenb(signal_loc_eff, tpeak)
@@ -200,16 +241,17 @@ tauL = {self.tauL}
 tres = {self.tres}
 VL filter = {self.VLfilter}
 dt = {self.dt}
-offset = {self.mx:.2g} + {self.offset:.2g}
+offset = {self.offset:.2g} (+ {self.mx:.2g})
 seed = {self.seed}
 midpoints = {self.midpoints}"""
 
     @property
     def interp(self):
         """
-        A linear interpolation of filter output.
+        A quadratic interpolation of filter output.
         """
-        return interpolate.interp1d(self.t, self.v, assume_sorted=True, copy=False)
+        kwargs = dict(assume_sorted=True, copy=False, kind='quadratic')
+        return interpolate.interp1d(self.t, self.v, **kwargs)
     
     def eventswhere(self, cond, which='signal'):
         """
@@ -279,8 +321,9 @@ midpoints = {self.midpoints}"""
         ax.plot(self.tpeak[sel], self.hpeak[sel], 'o', color='#f55', label='peaks')
         textbox.textbox(ax, self.info, loc='upper right', fontsize='small')
 
-        sel = (L <= self.t) & (self.t <= R)
-        ax.plot(self.t[sel], self.v[sel], label='filter')
+        step = self.dt / 5
+        t = np.arange(L, R + step / 2, step)
+        ax.plot(t, self.interp(t), label='filter')
         
         sel = (L <= self.hits1) & (self.hits1 <= R)
         ax.plot(self.hits1[sel], self.interp(self.hits1[sel]), '.k', label='signal hits')
