@@ -306,7 +306,6 @@ class Simulation(npzload.NPZLoad):
         
         figname = 'temps1.Simulation.plot_filter_performance_threshold.' + fname.replace(" ", "_")
         fig, axs = plt.subplots(2, 1, num=figname, figsize=[6.4, 7.19], clear=True, sharex=True)
-        axs[0].set_title(f'{fname.capitalize()} filter detection performance')
     
         ax = axs[0]
         ax.set_ylabel('Rate of S1 candidates [s$^{-1}$]')
@@ -324,11 +323,11 @@ class Simulation(npzload.NPZLoad):
         ax.minorticks_on()
         ax.grid(True, which='major', linestyle='--')
         ax.grid(True, which='minor', linestyle=':')
-        ax.legend(loc='upper right')
+        ax.legend(loc='upper right', title=fname + ' filter')
     
     
         ax = axs[1]
-        ax.set_ylabel('True S1 detection probability')
+        ax.set_ylabel('S1 detection efficiency')
         ax.set_xlabel('Threshold on filter output')
         
         for k in ['all', 's1']:
@@ -337,7 +336,7 @@ class Simulation(npzload.NPZLoad):
             y = np.concatenate([f(t), [0]])
             ax.plot(x, y, drawstyle='steps-pre', **self.plotkw[k])
 
-        textbox.textbox(ax, self.infotext())
+        textbox.textbox(ax, self.infotext(), fontsize='small')
     
         ax.minorticks_on()
         ax.grid(True, which='major', linestyle='--')
@@ -356,30 +355,24 @@ class Simulation(npzload.NPZLoad):
         
         figname = 'temps1.Simulation.plot_filter_performance'
         fig, ax = plt.subplots(num=figname, clear=True)
-        ax.set_title(f'Filter detection performance')
     
-        ax.set_xlabel('Rate of S1 candidates in DC photons [s$^{-1}$]')
-        ax.set_ylabel('S1 loss probability')
+        ax.set_xlabel('Rate of S1 candidates in DCR [s$^{-1}$]')
+        ax.set_ylabel('S1 detection efficiency')
         
-        prop_cycle = plt.rcParams['axes.prop_cycle']
-        colors = prop_cycle.by_key()['color']
-        
-        for fname, color in zip(filters, colors):
-            for k in ['all', 's1']:
+        for i, fname in enumerate(filters):
+            for k in ['all']:
                 f, r = self.efficiency_vs_rate(fname, k)
                 kw = dict(self.plotkw[k])
-                kw.update(color=color, label=fname.capitalize() + ' filter, ' + kw['label'])
-                ax.plot(r, 1 - f(r), **kw)
+                kw.update(color=f'C{i}', label=fname + ' filter, ' + kw['label'])
+                ax.plot(r, f(r), **kw)
         
-        textbox.textbox(ax, self.infotext(), loc='lower left')
+        textbox.textbox(ax, self.infotext(), loc='upper left', fontsize='small')
 
-        ax.legend(loc='upper right', fontsize='small')
+        ax.legend(loc='lower right', fontsize='medium')
         ax.minorticks_on()
         ax.set_xscale('log')
-        ax.set_yscale('log')
         ax.grid(True, which='major', linestyle='--')
         ax.grid(True, which='minor', linestyle=':')
-        autolinscale(ax)
         
         fig.tight_layout()
         
@@ -510,7 +503,7 @@ class Simulation(npzload.NPZLoad):
 nevents = {self.nmc}
 T = {self.T * 1e-6:.1f} ms
 total DCR = {self.DCR * self.npdm * 1e3:.2g} $\\mu$s$^{{-1}}$
-fast/slow = {self.VL:.1f}
+fast/slow = {self.VL:.2g} ({'ER' if self.VL < 1 else 'NR'})
 nphotons = {self.nphotons}
 $\\tau$ = ({self.tauV:.1f}, {self.tauL:.0f}) ns
 temporal res. = {self.tres:.1f} ns
