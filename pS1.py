@@ -74,6 +74,17 @@ def p_S1_gauss_maximum(VL, tauV, tauL, sigma):
     assert -sigma <= result.x <= 5 * sigma
     return result.x
 
+def p_exp_gauss_maximum(tau, sigma):
+    """
+    Return the position of the maximum of p_exp_gauss with the given parameters.
+    """
+    fun = lambda t: -log_p_exp_gauss(t, tau, sigma)
+    bracket = (0, sigma)
+    result = optimize.minimize_scalar(fun, bracket)
+    assert result.success
+    assert -sigma <= result.x <= 5 * sigma
+    return result.x
+
 def check_p_S1(VL=3, tauV=7, tauL=1600, tres=10):
     """
     plot p_S1 and p_S1_gauss.

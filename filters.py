@@ -109,6 +109,8 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
             'cross correlation'
             'ER'
             'NR'
+            'fast'
+            'slow'
             'sample mode'
             'sample mode cross correlation'
     pbar_batch : int, optional
@@ -132,6 +134,8 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
     length['cross correlation'] = nt
     length['ER'] = nt
     length['NR'] = nt
+    length['fast'] = nt
+    length['slow'] = nt
     length['sample mode cross correlation'] = nt
     
     out = np.empty(len(hits), dtype=[
@@ -145,13 +149,22 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
     all_out = out
     
     template = dict()
+    
     for vl, f in [(VL, 'cross correlation'), (VLER, 'ER'), (VLNR, 'NR')]:
+        if f not in which:
+            continue
         offset = pS1.p_S1_gauss_maximum(vl, tauV, tauL, tres)
         ampl = pS1.p_S1_gauss(offset, vl, tauV, tauL, tres)
         fun = lambda t: pS1.p_S1_gauss(t + offset, vl, tauV, tauL, tres) / ampl
-        template[f] = numba.njit('f8(f8)')(fun)
-    left = -5 * tres
-    right = 10 * tauL
+        template[f] = (numba.njit('f8(f8)')(fun), -5 * tres, 10 * tauL)
+    
+    for tau, f in [(tauV, 'fast'), (tauL, 'slow')]:
+        if f not in which:
+            continue
+        offset = pS1.p_exp_gauss_maximum(tau, tres)
+        ampl = pS1.p_exp_gauss(offset, tau, tres)
+        fun = lambda t: pS1.p_exp_gauss(t + offset, tau, tres) / ampl
+        template[f] = (numba.njit('f8(f8)')(fun), -5 * tres, max(10 * tau, 5 * tres))
 
     def batch(s):
         hits = all_hits[s]
@@ -168,10 +181,9 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
         
         t = addmidpoints(hits, midpoints)
     
-        for filt, fun in template.items():
-            if filt in which:
-                v = filter_cross_correlation(hits, t, fun, left, right)
-                timevalue[filt] = (t, v)
+        for filt, (fun, left, right) in template.items():
+            v = filter_cross_correlation(hits, t, fun, left, right)
+            timevalue[filt] = (t, v)
         
         if 'sample mode cross correlation' in which:
             fun = template['cross correlation']
