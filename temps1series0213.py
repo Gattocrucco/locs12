@@ -557,3 +557,93 @@ temporal res. = {self.tres:.2g} ns
 sigma = {self.sigma:.2g} ns
 dead radius = {self.deadradius:.0f} ns
 midpoints = {self.midpoints}"""
+
+if __name__ == '__main__':
+    
+    arguments = dict(
+        DCR = [25e-9, 250e-9],
+        VL = [0.3, 3],
+        nphotons = [3, 7, 10, 15, 20, 30, 40],
+        sigma = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 140, 160]
+    )
+    fixedarguments = dict(
+        nmc = 1000,
+        pbar_batch = None,
+        tres = 10,
+        filters = ['ER', 'NR'],
+    )
+    outfile = 'temps1series0213.npy'
+    
+    ####################
+    
+    import warnings
+    
+    import tqdm
+    from numpy.lib import format as nplf
+    
+    import named_cartesian_product
+    
+    warnings.filterwarnings("ignore")
+    
+    generator = np.random.default_rng(202102131121)
+    
+    arglist = named_cartesian_product.named_cartesian_product(**arguments)
+    
+    rate = np.concatenate([
+        np.linspace(0, 100, 1000),
+        np.logspace(np.log10(100), np.log10(2e6), 1000)[1:]
+    ])
+    threshold = np.concatenate([
+        np.linspace(0, 1, 20)[:-1],
+        np.logspace(np.log10(1), np.log10(np.max(arguments['nphotons'])), 1000)
+    ])
+    
+    filterdtype = [
+        ('efficiency', float, len(rate)),
+        ('ratethr', float, len(threshold)),
+        ('effthr', float, len(threshold)),
+    ]
+    table = nplf.open_memmap(outfile, mode='w+', shape=arglist.shape, dtype=[
+        ('done', bool),
+        ('parameters', arglist.dtype),
+        ('rate', float, len(rate)),
+        ('threshold', float, len(threshold)),
+        ('ER', filterdtype),
+        ('NR', filterdtype),
+    ])
+    table['done'] = False
+    table['parameters'] = arglist
+    table['rate'] = rate
+    table['threshold'] = threshold
+    table.flush()
+    
+    print(f'saving to {outfile}...')
+    
+    table0 = table
+    table = table.view()
+    table.shape = (table.size,)
+    
+    kw = dict(generator=generator)
+    kw.update(fixedarguments)
+    
+    indices = np.arange(len(table))
+    np.random.shuffle(indices)
+    
+    for i in tqdm.tqdm(indices):
+        entry = table[i]
+        
+        argstruct = entry['parameters']
+        argdict = {k: argstruct[k] for k in argstruct.dtype.names}
+        kw.update(argdict)
+        
+        sim = Simulation(**kw)
+        for fname in sim.filters:
+            f, r = sim.efficiency_vs_rate(fname)
+            entry[fname]['efficiency'] = f(rate)
+            g, tg = sim.candidates_above_threshold(fname, 'dcr', False, True)
+            entry[fname]['ratethr'] = g(threshold)
+            h, th = sim.candidates_above_threshold(fname, 'all', True, False)
+            entry[fname]['effthr'] = h(threshold)
+        
+        entry['done'] = True
+        table0.flush()

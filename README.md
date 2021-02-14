@@ -12,10 +12,17 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
     temporal localization filters with the version of `temps1.py` from February
     3, 2021.
 
-  * `temps1series0203.py`: save efficiency vs. rate curves of s1 localization
+  * `temps1series0203.py`: save efficiency vs. rate curves with `nmc=10000` of s1 localization
     with the version of `temps1.py` from February 3, 2021.
     
   * `temps1series0203plot.py`: plot the results from the above script (can be
+    executed while the other script is still running to show partial results).
+
+  * `temps1series0213.py`: save efficiency vs. rate and efficiency and rate vs.
+    threshold curves with `nmc=1000` of s1 localization with the version of
+    `temps1.py` from February 13, 2021.
+    
+  * `temps1series0213plot.py`: plot the results from the above script (can be
     executed while the other script is still running to show partial results).
 
 ## Modules

@@ -4,9 +4,8 @@
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
 __pycache__
-temps1plots20210131
-temps1plots20210203
-temps1series0203*.npy
+temps1plots*
+temps1series*.npy
 
 # Node artifact files
 node_modules/
