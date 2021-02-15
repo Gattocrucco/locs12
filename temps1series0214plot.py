@@ -4,7 +4,7 @@ from scipy import interpolate
 
 import textbox
 
-inphotons = 3 # in [3, 5, 7, 10, 15, 20, 30]
+inphotons = 2 # in [3, 5, 7, 10, 15, 20, 30]
 idcr = 1 # in [25, 250] cps/pdm
 rate = 100 # cps
 

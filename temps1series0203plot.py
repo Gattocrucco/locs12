@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 from scipy import interpolate
 
 rate = 10
+onlytres10 = True
 
 table = np.load('temps1series0203.npy')
 
@@ -19,12 +20,13 @@ for ii, i in enumerate(np.ndindex(*table.shape[:-1])):
         continue
     
     params = entries[0]['parameters']
-    params['DCR'] *= 1e9
-    units = dict(DCR=' Hz/pdm', tres=' ns')
-    label = ', '.join([
-        f'{name}={params[name]:.3g}{units.get(name, "")}'
-        for name in params.dtype.names[:-1]
-    ])
+    if onlytres10 and params['tres'] != 10:
+        continue
+    
+    label = f'DCR={params["DCR"] * 1e9:.3g} cps/pdm, '
+    label += 'ER' if params['VL'] < 1 else 'NR'
+    if not onlytres10:
+        label += f', tres={params["tres"]} ns'
     
     nphotons = entries['parameters']['nphotons']
     interpkw = dict(kind='linear', assume_sorted=True, copy=False)

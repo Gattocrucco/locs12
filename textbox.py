@@ -20,15 +20,14 @@ def textbox(ax, text, loc='lower left', **kw):
     The return value is that from ax.annotate.
     """
     
-    # TODO update dictionaries in kwargs with dictionaries in kw? for bbox
-    # (only if both are dictionaries, to allow deletion)
-    
     M = 8
     locparams = {
-        'lower left' : dict(xy=(0, 0), xytext=( M,  M), va='bottom', ha='left' ),
-        'upper left' : dict(xy=(0, 1), xytext=( M, -M), va='top'   , ha='left' ),
-        'lower right': dict(xy=(1, 0), xytext=(-M,  M), va='bottom', ha='right'),
-        'upper right': dict(xy=(1, 1), xytext=(-M, -M), va='top'   , ha='right'),
+        'lower left'  : dict(xy=(0  , 0  ), xytext=( M,  M), va='bottom', ha='left'  ),
+        'upper left'  : dict(xy=(0  , 1  ), xytext=( M, -M), va='top'   , ha='left'  ),
+        'lower right' : dict(xy=(1  , 0  ), xytext=(-M,  M), va='bottom', ha='right' ),
+        'center right': dict(xy=(1  , 0.5), xytext=(-M,  0), va='center', ha='right' ),
+        'upper right' : dict(xy=(1  , 1  ), xytext=(-M, -M), va='top'   , ha='right' ),
+        'upper center': dict(xy=(0.5, 1  ), xytext=( 0, -M), va='top'   , ha='center'),
     }
     
     kwargs = dict(
@@ -43,6 +42,12 @@ def textbox(ax, text, loc='lower left', **kw):
         ),
     )
     kwargs.update(locparams[loc])
-    kwargs.update(kw)
+    
+    newkw = dict(kw)
+    for k, v in kw.items():
+        if isinstance(v, dict) and isinstance(kwargs.get(k, None), dict):
+            kwargs[k].update(v)
+            newkw.pop(k)
+    kwargs.update(newkw)
     
     return ax.annotate(text, **kwargs)

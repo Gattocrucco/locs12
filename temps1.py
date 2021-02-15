@@ -33,6 +33,17 @@ def plot_histogram(ax, counts, bins, **kw):
     """
     return ax.plot(np.concatenate([bins[:1], bins]), np.concatenate([[0], counts, [0]]), drawstyle='steps-post', **kw)
 
+def inrangep1(x, l, r):
+    """
+    Return boolean mask for l <= x <= r with 1 additional True before and after
+    the first/last True.
+    """
+    sel = (l <= x) & (x <= r)
+    isel = np.flatnonzero(sel)
+    sel[max(0, isel[0] - 1)] = True
+    sel[min(len(sel) - 1, isel[-1] + 1)] = True
+    return sel
+
 class Simulation(npzload.NPZLoad):
     """
     Class to simulate S1 photons and DCR with temporal information only.
@@ -167,42 +178,7 @@ class Simulation(npzload.NPZLoad):
                 self.values[fname][k] = value[idx]
                 self.signal[fname][k] = signal[idx]
     
-    def _counts_interp(self, fname, signal=False):
-        """
-        Parameters:
-        fname = filter name
-        signal = if True, count just candidates marked as true S1
-        Return:
-        x : dictionary photon series -> sorted 1D array of threshold values
-        interp : dictionary photon series -> (function scalar -> scalar)
-        The function computes the number of candidates below a threshold,
-        per event.
-        The x threshold values are points where the function goes down by one
-        step.
-        """
-        values = self.values[fname]
-        if signal:
-            values = {
-                k: v[self.signal[fname][k]]
-                for k, v in values.items()
-            }
-        
-        x = dict(values)
-        y = {
-            k: (1 + np.arange(len(v)))[::-1] / self.nmc
-            for k, v in values.items()
-        }
-        # x = threshold
-        # y = number of candidates below threshold
-        interpkw = dict(kind='next', assume_sorted=True, copy=False, bounds_error=False)
-        interp = {
-            k: interpolate.interp1d(x[k], y[k], fill_value=(y[k][0], 0), **interpkw)
-            for k in values
-        }
-                
-        return x, interp
-        
-    def candidates_above_threshold(self, fname, hits, signalonly=False, rate=False):
+    def candidates_above_threshold(self, fname, hits, signalonly=False, rate=False, linear=False):
         """
         Return a function to compute the number of candidates above a given
         threshold, and the array of thresholds where the function has steps.
@@ -220,6 +196,9 @@ class Simulation(npzload.NPZLoad):
         rate : bool
             If True, compute the candidates per unit time (second) instead of
             per event. Default False.
+        linear : bool
+            If True, do linear interpolation instead of strictly counting the
+            candidates. Default False.
         
         Return
         ------
@@ -229,18 +208,19 @@ class Simulation(npzload.NPZLoad):
         t : sorted 1D array
             The thresholds where f has steps.
         """
-        assert not (signalonly and hits == 'dcr')
+        values = self.values[fname][hits]
+        if signalonly:
+            sel = self.signal[fname][hits]
+            values = values[sel]
         
-        cache = '_xinterp_s' if signalonly else '_xinterp'
-        if not hasattr(self, cache):
-            setattr(self, cache, {
-                fname: self._counts_interp(fname, signalonly)
-                for fname in self.values
-            })
-        
-        x, interp = getattr(self, cache)[fname]
-        x = x[hits]
-        interp = interp[hits]
+        x = values
+        y = (1 + np.arange(len(values)))[::-1] / self.nmc
+        # x = threshold
+        # y = number of candidates >= threshold per event
+        interpkw = dict(kind='next', assume_sorted=True, copy=False, bounds_error=False, fill_value=(y[0], 0))
+        if linear:
+            interpkw.update(kind='linear', fill_value='extrapolate')
+        interp = interpolate.interp1d(x, y, **interpkw)
         
         if rate:
             factor = 1 / (self.T * 1e-9)
@@ -260,7 +240,7 @@ class Simulation(npzload.NPZLoad):
         else:
             raise KeyError(fname)
     
-    def efficiency_vs_rate(self, fname=None, signalhits='all'):
+    def efficiency_vs_rate(self, fname=None, signalhits='all', raw=False, interp=False):
         """
         Give a function to compute the S1 detection efficiency given the rate
         of fake S1 in noise photons.
@@ -271,31 +251,40 @@ class Simulation(npzload.NPZLoad):
             The filter to use. Optional if there's only one filter.
         signalhits : {'all', 's1'}
             Whether to count signals within noise (default) or alone.
+        raw : bool
+            If True, return arrays of coordinates instead of interpolating
+            function.
+        interp : bool
+            If True, interpolate the count of fakes and signals vs
+            threshold.
         
         Return
         ------
         f : function scalar -> scalar
-            A piecewise linear function mapping fake rate to efficiency.
+            A piecewise linear function mapping fake rate to efficiency. If
+            raw=True: array of the efficiency.
         r : sorted 1D array
             The rates where f changes slope.
         """
         fname = self._fname(fname)
         
-        f,   t   = self.candidates_above_threshold(fname, 'dcr'     , signalonly=False, rate=True )
-        fs1, ts1 = self.candidates_above_threshold(fname, signalhits, signalonly=True , rate=False)
+        fdc, tdc = self.candidates_above_threshold(fname, 'dcr'     , signalonly=False, rate=True , linear=interp)
+        fs1, ts1 = self.candidates_above_threshold(fname, signalhits, signalonly=True , rate=False, linear=interp)
         
-        sel = (ts1[0] <= t) & (t <= ts1[-1])
-        t = t[sel]
+        tdcsel = inrangep1(tdc, ts1[0], ts1[-1])
+        ts1sel = inrangep1(ts1, tdc[0], tdc[-1])
         
-        t = np.sort(np.concatenate([t, ts1]))[::-1]
+        t = np.sort(np.concatenate([tdc[tdcsel], ts1[ts1sel]]))[::-1]
 
-        r = np.concatenate([[0], f(t)])
+        r = np.concatenate([[0], fdc(t)])
         e = np.concatenate([[0], fs1(t)])
+        if raw:
+            return e, r
         interpkw = dict(kind='linear', assume_sorted=True, copy=False, bounds_error=False)
         f = interpolate.interp1d(r, e, fill_value=(e[0], e[-1]), **interpkw)
         return f, r
         
-    def plot_filter_performance_threshold(self, fname=None):
+    def plot_filter_performance_threshold(self, fname=None, interp=False):
         """
         Plot filter fake rate and efficiency vs threshold.
         
@@ -303,6 +292,9 @@ class Simulation(npzload.NPZLoad):
         ----------
         fname : str, optional
             The filter. Optional if there's only one filter.
+        interp : bool
+            If False (default), count the candidates above threshold. If True,
+            do a linear interpolation of the number of candidates.
         
         Return
         ------
@@ -318,10 +310,13 @@ class Simulation(npzload.NPZLoad):
         ax.set_ylabel('Rate of S1 candidates [s$^{-1}$]')
         
         for k in ['all', 'dcr', 's1']:
-            f, t = self.candidates_above_threshold(fname, k, rate=True)
-            x = np.concatenate([t, t[-1:]])
-            y = np.concatenate([f(t), [0]])
-            ax.plot(x, y, drawstyle='steps-pre', **self.plotkw[k])
+            f, t = self.candidates_above_threshold(fname, k, rate=True, linear=interp)
+            if interp:
+                ax.plot(t, f(t), **self.plotkw[k])
+            else:
+                x = np.concatenate([t, t[-1:]])
+                y = np.concatenate([f(t), [0]])
+                ax.plot(x, y, drawstyle='steps-pre', **self.plotkw[k])
         
         rate1 = 1 / (self.T * 1e-9)
         ax.axhspan(0, rate1, color='#ddd', label='$\\leq$ 1 cand. per event')
@@ -354,7 +349,7 @@ class Simulation(npzload.NPZLoad):
         
         return fig
     
-    def plot_filter_performance(self, filters=None):
+    def plot_filter_performance(self, filters=None, interp=False):
         """
         Plot filter efficiency vs fake rate.
         
@@ -362,6 +357,9 @@ class Simulation(npzload.NPZLoad):
         ----------
         filters : (list of) str, optional
             The filters to plot. All filters if not specified.
+        interp : bool
+            If True, interpolate the fakes and signal counts vs threshold.
+            Default False.
         
         Return
         ------
@@ -381,10 +379,10 @@ class Simulation(npzload.NPZLoad):
         
         for i, fname in enumerate(filters):
             for k in ['all']:
-                f, r = self.efficiency_vs_rate(fname, k)
+                e, r = self.efficiency_vs_rate(fname, k, raw=True, interp=interp)
                 kw = dict(self.plotkw[k])
                 kw.update(color=f'C{i}', label=fname + ' filter, ' + kw['label'])
-                ax.plot(r, f(r), **kw)
+                ax.plot(r, e, **kw)
         
         textbox.textbox(ax, self.infotext(), loc='upper left', fontsize='small')
 
@@ -506,27 +504,26 @@ class Simulation(npzload.NPZLoad):
         counts = counts / (self.nmc * self.T * 1e-9)
         linenoise, = plot_histogram(ax, counts, bins, **self.plotkw['dcr'])
 
+        x = self.values[fname]['all'][self.signal[fname]['all']]
+        counts, bins = np.histogram(x, bins='auto')
+        counts = counts * 100 / len(x)
+        linesig, = plot_histogram(axr, counts, bins, **self.plotkw['all'])
+        
         x = self.values[fname]['s1'][self.signal[fname]['s1']]
         counts, bins = np.histogram(x, bins='auto')
         counts = counts * 100 / len(x)
         linesigpure, = plot_histogram(axr, counts, bins, **self.plotkw['s1'])
-        N = len(x)
         
-        x = self.values[fname]['all'][self.signal[fname]['all']]
-        counts, bins = np.histogram(x, bins='auto')
-        counts = counts * 100 / N
-        linesig, = plot_histogram(axr, counts, bins, **self.plotkw['all'])
-        
-        textbox.textbox(axr, self.infotext(), loc='upper right')
+        textbox.textbox(axr, self.infotext(), loc='upper right', fontsize='small')
 
         axr.legend([
             linenoise,
-            linesigpure,
             linesig,
+            linesigpure,
         ], [
             'Fake rate (left scale)',
             'Signal % (right scale)',
-            'Signal within noise (relative)',
+            'Signal without noise',
         ], loc='upper left')
         
         ax.minorticks_on()
