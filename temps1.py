@@ -384,11 +384,12 @@ class Simulation(npzload.NPZLoad):
                 e, r = self.efficiency_vs_rate(fname, k, raw=True, interp=interp)
                 kw = dict(self.plotkw[k])
                 kw.update(color=f'C{i}', label=fname + ' filter, ' + kw['label'])
-                ax.plot(r, e, **kw)
+                sel = r != 0
+                ax.plot(r[sel], e[sel], **kw)
         
-        textbox.textbox(ax, self.infotext(), loc='upper left', fontsize='small')
+        textbox.textbox(ax, self.infotext(), fontsize='small', loc='center right')
 
-        ax.legend(loc='lower right', fontsize='medium')
+        ax.legend(loc='lower right', fontsize='small')
         ax.minorticks_on()
         ax.set_xscale('log')
         ax.grid(True, which='major', linestyle='--')

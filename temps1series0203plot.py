@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 from scipy import interpolate
 
 rate = 10
-onlytres10 = True
+onlytres10 = False
 
 table = np.load('temps1series0203.npy')
 
