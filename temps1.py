@@ -48,6 +48,8 @@ class Simulation(npzload.NPZLoad):
     """
     Class to simulate S1 photons and DCR with temporal information only.
     The simulation runs at object initialization.
+    
+    Read the code for a description of the initialization parameters.
     """
     
     def __init__(self,
@@ -431,7 +433,7 @@ class Simulation(npzload.NPZLoad):
         ax.axvspan(-self.deadradius, self.deadradius, color='#eee', zorder=-9, label='$\\pm$ dead radius')
 
         ax.legend(loc='upper right')
-        ax.set_xlim(3.5 * self.deadradius * np.array([-1, 1]))
+        ax.set_xlim(1.5 * self.deadradius * np.array([-1, 1]))
         ax.set_yscale('log')
         ax.minorticks_on()
         ax.grid(True, which='major', linestyle='--')
@@ -452,15 +454,15 @@ class Simulation(npzload.NPZLoad):
         # ax.plot(t, pS1.p_S1_gauss(t, self.VL, self.tauV, self.tauL, self.tres), label='S1 pdf')
         histkw = dict(bins='auto', density=True, histtype='step', zorder=10)
         ax.hist(times1, label=f'S1 photons ({len(times1)})', linestyle=':', **histkw)
-        ax.hist(time_match, label=f'matching candidates ($\\sigma_q$={sigma:.3g})', **histkw)
+        ax.hist(time_match, label=f'matching candidates ($\\sigma_q$={sigma:.3g} ns)', **histkw)
     
-        ax.axvspan(0, self.deadradius, color='#eee', zorder=-9, label='dead radius')
+        ax.axvspan(0, self.deadradius, color='#eee', zorder=-9, label=f'dead radius ({self.deadradius} ns)')
 
         textbox.textbox(ax, self.infotext(), loc='upper left', zorder=11)
     
         ax.legend(loc='upper right', fontsize='small')
         ax.set_yscale('log')
-        linthreshx = 10 ** np.ceil(np.log10(15 * sigma))
+        linthreshx = 100 #10 ** np.ceil(np.log10(15 * sigma))
         ax.set_xscale('symlog', linthreshx=linthreshx)
         ax.minorticks_on()
         ax.xaxis.set_minor_locator(symloglocator.MinorSymLogLocator(linthreshx))

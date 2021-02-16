@@ -2,6 +2,8 @@
 Module with filters for hit times series.
 """
 
+import collections
+
 import numpy as np
 from matplotlib import pyplot as plt
 import numba
@@ -89,7 +91,19 @@ def addmidpoints(hits, midpoints):
     t = np.concatenate([t, hits[:, -1:]], axis=-1)
     return t
 
-def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cross correlation'], pbar_batch=None, VLER=0.3, VLNR=3):
+def filters(
+    hits,
+    VL,
+    tauV,
+    tauL,
+    tres,
+    midpoints=1,
+    which=['sample mode', 'cross correlation'],
+    pbar_batch=None,
+    VLER=0.3,
+    VLNR=3,
+    tcoinc=200,
+):
     """
     Run filters on hit times.
     
@@ -111,12 +125,15 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
             'NR'
             'fast'
             'slow'
+            'coinc'
             'sample mode'
             'sample mode cross correlation'
     pbar_batch : int, optional
         If given, a progressbar is shown that ticks every `pbar_batch` events.
     VLER, VLNR : scalar
         VL p_S1_gauss parameter for the ER and NR filters.
+    tcoinc : scalar
+        Length of the coincidence window for the coinc filter.
     
     Return
     ------
@@ -128,15 +145,9 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
     hits = np.asarray(hits)
     assert len(hits.shape) == 2
     
-    length = {}
-    length['sample mode'] = hits.shape[1] - 1
     nt = (hits.shape[1] - 1) * (midpoints + 1) + 1
-    length['cross correlation'] = nt
-    length['ER'] = nt
-    length['NR'] = nt
-    length['fast'] = nt
-    length['slow'] = nt
-    length['sample mode cross correlation'] = nt
+    length = collections.defaultdict(lambda: nt)
+    length['sample mode'] = hits.shape[1] - 1
     
     out = np.empty(len(hits), dtype=[
         (filter_name, [
@@ -165,6 +176,10 @@ def filters(hits, VL, tauV, tauL, tres, midpoints=1, which=['sample mode', 'cros
         ampl = pS1.p_exp_gauss(offset, tau, tres)
         fun = lambda t: pS1.p_exp_gauss(t + offset, tau, tres) / ampl
         template[f] = (numba.njit('f8(f8)')(fun), -5 * tres, max(10 * tau, 5 * tres))
+    
+    if 'coinc' in which:
+        eps = 0.00001
+        template['coinc'] = (numba.njit('f8(f8)')(lambda t: 1), -eps * tcoinc, (1 - eps) * tcoinc)
 
     def batch(s):
         hits = all_hits[s]
