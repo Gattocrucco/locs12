@@ -103,6 +103,9 @@ def filters(
     VLER=0.3,
     VLNR=3,
     tcoinc=200,
+    dcr=None,
+    nph=None,
+    sigma=None,
 ):
     """
     Run filters on hit times.
@@ -126,6 +129,7 @@ def filters(
             'fast'
             'slow'
             'coinc'
+            'likelihood'
             'sample mode'
             'sample mode cross correlation'
     pbar_batch : int, optional
@@ -134,6 +138,8 @@ def filters(
         VL p_S1_gauss parameter for the ER and NR filters.
     tcoinc : scalar
         Length of the coincidence window for the coinc filter.
+    dcr, nph, sigma: scalar
+        Parameters for the 'likelihood' filter.
     
     Return
     ------
@@ -161,7 +167,7 @@ def filters(
     
     template = dict()
     
-    for vl, f in [(VL, 'cross correlation'), (VLER, 'ER'), (VLNR, 'NR')]:
+    for vl, f in [(VL, 'sample mode cross correlation'), (VL, 'cross correlation'), (VLER, 'ER'), (VLNR, 'NR')]:
         if f not in which:
             continue
         offset = pS1.p_S1_gauss_maximum(vl, tauV, tauL, tres)
@@ -180,6 +186,12 @@ def filters(
     if 'coinc' in which:
         eps = 0.00001
         template['coinc'] = (numba.njit('f8(f8)')(lambda t: 1), -eps * tcoinc, (1 - eps) * tcoinc)
+    
+    if 'likelihood' in which:
+        offset = pS1.p_S1_gauss_maximum(vl, tauV, tauL, sigma)
+        ampl = pS1.log_likelihood(offset, vl, tauV, tauL, sigma, dcr, nph)
+        fun = lambda t: pS1.log_likelihood(t + offset, vl, tauV, tauL, sigma, dcr, nph) / ampl
+        template['likelihood'] = (numba.njit('f8(f8)')(fun), -5 * sigma, 10 * tauL)
 
     def batch(s):
         hits = all_hits[s]
@@ -200,10 +212,11 @@ def filters(
             v = filter_cross_correlation(hits, t, fun, left, right)
             timevalue[filt] = (t, v)
         
-        if 'sample mode cross correlation' in which:
-            fun = template['cross correlation']
+        name = 'sample mode cross correlation'
+        if name in which:
+            fun, left, right = template[name]
             v = filter_sample_mode_cross_correlation(hits, t, fun, left, right)
-            timevalue['sample mode cross correlation'] = (t, v)
+            timevalue[name] = (t, v)
     
         for k, (t, v) in timevalue.items():
             out[k]['time'] = t

@@ -9,6 +9,7 @@ import numba
 
 import numba_scipy_special
 import sampling_bounds
+import textbox
 
 def pexp(t, tau):
     """
@@ -242,7 +243,14 @@ def check_ps2(p1=0.1, tau1=11, tau2=3200, T=15000, sigma=1000):
     ax.plot(t, yc / np.max(y), label='S2 + diffusion')
     ax.plot(mx, my / np.max(y), 'xk', label='maximum')
     
-    ax.legend(loc='best')
+    textbox.textbox(ax, f"""\
+$p_1$ = {p1}
+$\\tau_1$ = {tau1} ns
+$\\tau_2$ = {tau2} ns
+$T$ = {T} ns
+$\\sigma$ = {sigma} ns""", fontsize='medium', loc='lower center')
+    
+    ax.legend(loc='upper right')
     ax.minorticks_on()
     ax.grid(True, which='major', linestyle='--')
     ax.grid(True, which='minor', linestyle=':')

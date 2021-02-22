@@ -4,7 +4,7 @@ import numba
 from scipy import interpolate, signal
 
 import pS1
-import dcr
+from dcr import gen_DCR
 import filters
 import textbox
 import npzload
@@ -85,8 +85,9 @@ def parabola(v, idx):
     
 class TestCCFilter(npzload.NPZLoad):
     """
-    Class to study where to compute the cross correlation filter. The
-    description of the initialization parameters is in the code.
+    Class to study where to compute the cross correlation filter.
+    
+    The description of the initialization parameters is in the code.
     
     Photon hits are simulated for a time nevents * T. Dark count photons are
     populated with the specified rate. Each T interval contains one S1 signal.
@@ -128,19 +129,23 @@ class TestCCFilter(npzload.NPZLoad):
     """
 
     def __init__(self,
-        nevents=1,      # number of events
-        nsignal=10,     # number of photons per S1
-        T=10000,        # (ns) length of event
-        rate=0.0025,    # (ns^-1) rate of dark count photons
-        VL=3,           # fast/slow ratio of S1
-        tauV=7,         # (ns) S1 fast tau
-        tauL=1600,      # (ns) S1 slow tau
-        tres=10,        # (ns) temporal resolution
-        VLfilter=None,  # fast/slow ratio of filter, default same as VL
-        dt=1,           # (ns) filter output sampling period
-        offset=0,       # (ns) template is transformed as f'(t) = f(t + offset)
-        seed=None,      # seed of random generator
-        midpoints=1     # number of points inserted between consecutive hits
+        nevents=1,        # number of events
+        nsignal=10,       # number of photons per S1
+        T=10000,          # (ns) length of event
+        rate=0.0025,      # (ns^-1) rate of dark count photons
+        VL=3,             # fast/slow ratio of S1
+        tauV=7,           # (ns) S1 fast tau
+        tauL=1600,        # (ns) S1 slow tau
+        tres=10,          # (ns) temporal resolution
+        VLfilter=None,    # fast/slow ratio of filter, default same as VL
+        dt=1,             # (ns) filter output sampling period
+        offset=0,         # (ns) template is transformed as f'(t) = f(t+offset)
+        seed=None,        # seed of random generator
+        midpoints=1,      # number of points inserted between consecutive hits
+        likelihood=False, # if True, use the likelihood instead of cckde
+        dcr=None,         # DCR for the likelihood, default <rate>
+        nph=None,         # S1 photons for the likelihood, default <nsignal>
+        sigmakde=0,       # (ns) sigma of the KDE
     ):
         if VLfilter is None:
             VLfilter = VL
@@ -149,25 +154,39 @@ class TestCCFilter(npzload.NPZLoad):
             seedgen = np.random.default_rng()
             seed = seedgen.integers(10001)
         generator = np.random.default_rng(seed)
+        
+        if dcr is None:
+            dcr = rate
+            
+        if nph is None:
+            nph = nsignal
 
         hits1 = pS1.gen_S1((nevents, nsignal), VL, tauV, tauL, tres, generator)
         signal_loc = (T / 10 + 5 * tres) + T * np.arange(nevents)
         hits1 += signal_loc[:, None]
         hits1 = hits1.reshape(-1)
-        hitdcr = dcr.gen_DCR((), T * nevents, rate, generator)
+        hitdcr = gen_DCR((), T * nevents, rate, generator)
     
         hits = np.sort(np.concatenate([hits1, hitdcr]))
-    
-        mx = pS1.p_S1_gauss_maximum(VL, tauV, tauL, tres)
-        ampl = pS1.p_S1_gauss(mx, VL, tauV, tauL, tres)
-        fun = numba.njit('f8(f8)')(lambda t: pS1.p_S1_gauss(t + mx + offset, VL, tauV, tauL, tres) / ampl)
+        
+        if likelihood:
+            mx = pS1.p_S1_gauss_maximum(VLfilter, tauV, tauL, tres)
+            ampl = pS1.log_likelihood(mx, VLfilter, tauV, tauL, tres, dcr, nph)
+            fun = lambda t: pS1.log_likelihood(t + mx + offset, VLfilter, tauV, tauL, tres, dcr, nph) / ampl
+            fun = numba.njit('f8(f8)')(fun)
+        else:
+            sigma = np.hypot(sigmakde, tres)
+            mx = pS1.p_S1_gauss_maximum(VLfilter, tauV, tauL, sigma)
+            ampl = pS1.p_S1_gauss(mx, VLfilter, tauV, tauL, sigma)
+            fun = lambda t: pS1.p_S1_gauss(t + mx + offset, VLfilter, tauV, tauL, sigma) / ampl
+            fun = numba.njit('f8(f8)')(fun)
         left = -5 * tres
         right = 10 * tauL
     
         t = np.arange(0, nevents * T, dt)
         v = filters.filter_cross_correlation(hits[None], t[None], fun, left, right)[0]
         
-        pidx, _ = signal.find_peaks(v, height=0.2)
+        pidx, _ = signal.find_peaks(v, height=0.9)
         dx, dy = parabola(v, pidx)
         tpeak = t[pidx] + dx * dt
         hpeak = v[pidx] + dy
@@ -200,6 +219,10 @@ class TestCCFilter(npzload.NPZLoad):
         self.offset = offset
         self.seed = seed
         self.midpoints = midpoints
+        self.likelihood = likelihood
+        self.dcr = dcr
+        self.nph = nph
+        self.sigmakde = sigmakde
     
     @property
     def midpoints(self):
@@ -230,7 +253,7 @@ class TestCCFilter(npzload.NPZLoad):
         """
         Human-readable description of simulation parameters.
         """
-        return f"""\
+        s = f"""\
 nevents = {self.nevents}
 nsignal = {self.nsignal}
 T = {self.T}
@@ -241,16 +264,27 @@ tauL = {self.tauL}
 tres = {self.tres}
 VL filter = {self.VLfilter}
 dt = {self.dt}
-offset = {self.offset:.2g} (+ {self.mx:.2g})
+offset = {self.offset} (+ {self.mx:.2g})
 seed = {self.seed}
-midpoints = {self.midpoints}"""
+midpoints = {self.midpoints}
+likelihood = {self.likelihood}"""
+        
+        if self.likelihood:
+            s += f"""
+dcr = {self.dcr}
+nph = {self.nph}"""
+        else:
+            s += f"""
+sigmakde = {self.sigmakde}"""
+        
+        return s
 
     @property
     def interp(self):
         """
         A quadratic interpolation of filter output.
         """
-        kwargs = dict(assume_sorted=True, copy=False, kind='quadratic')
+        kwargs = dict(assume_sorted=True, copy=False, kind='quadratic', bounds_error=False)
         return interpolate.interp1d(self.t, self.v, **kwargs)
     
     def eventswhere(self, cond, which='signal'):

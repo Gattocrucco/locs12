@@ -8,6 +8,7 @@ from matplotlib import pyplot as plt
 import numba
 
 import numba_scipy_special
+import textbox
 
 def p_exp(t, tau):
     """
@@ -63,6 +64,15 @@ def log_p_S1_gauss(t, VL, tauV, tauL, sigma):
     L = 1 / (1 + VL)
     return np.logaddexp(np.log(V) + log_p_exp_gauss(t, tauV, sigma), np.log(L) + log_p_exp_gauss(t, tauL, sigma))
 
+@numba.njit
+def log_likelihood(t, VL, tauV, tauL, sigma, dcr, nph):
+    """
+    Logarithm of the distribution of S1 + dcr.
+    dcr = total dark count rate
+    nph = number of S1 photons
+    """
+    return np.logaddexp(0, np.log(nph / dcr) + log_p_S1_gauss(t, VL, tauV, tauL, sigma))
+
 def p_S1_gauss_maximum(VL, tauV, tauL, sigma):
     """
     Return the position of the maximum of p_S1_gauss with the given parameters.
@@ -116,6 +126,37 @@ def check_p_S1(VL=3, tauV=7, tauL=1600, tres=10):
     ax.grid(True, which='minor', linestyle=':')
     ax.set_yscale('log')
     ax.set_ylim(np.min(yc), np.max(y))
+
+    fig.tight_layout()
+    fig.show()
+    
+    return fig
+
+def check_likelihood(VL=3, tauV=7, tauL=1600, tres=10, dcr=2.5e-3, nph=10):
+    """
+    plot log_likelihood.
+    """
+    fig, ax = plt.subplots(num='pS1.check_likelihood', clear=True)
+    
+    ax.set_title('Likelihood of S1 + dark count')
+    ax.set_xlabel('Time [ns]')
+    ax.set_ylabel('Log likelihood')
+    
+    t = np.linspace(-5 * tres, tauL, 10000)
+    y = log_likelihood(t, VL, tauV, tauL, tres, dcr, nph)
+    y2 = p_S1_gauss(t, VL, tauV, tauL, tres)
+    
+    mx = p_S1_gauss_maximum(VL, tauV, tauL, tres)
+    my = log_likelihood(mx, VL, tauV, tauL, tres, dcr, nph)
+    
+    ax.plot(t, y, label='likelihood')
+    ax.plot(mx, my, 'x', label='maximum')
+    ax.plot(t, y2 / np.max(y2) * np.max(y), label='p_S1_gauss (arb.un.)')
+    
+    ax.legend(loc='best')
+    ax.minorticks_on()
+    ax.grid(True, which='major', linestyle='--')
+    ax.grid(True, which='minor', linestyle=':')
 
     fig.tight_layout()
     fig.show()

@@ -43,6 +43,7 @@ def downcast(dtype, *shorttypes):
     """
     dtype = np.dtype(dtype)
     for shorttype in shorttypes:
+        # TODO move the cycle inside a last <else> in _downcast
         shorttype = np.dtype(shorttype)
         dtype = _downcast(dtype, shorttype)
     return dtype
@@ -54,6 +55,8 @@ def _downcast(dtype, shorttype):
             for name, field in dtype.fields.items()
         ])
     elif dtype.subdtype is not None:
+        # TODO maybe I first have to check for subdtype, then names, check
+        # if the current implementation fails on names with shape
         return np.dtype((_downcast(dtype.base, shorttype), dtype.shape))
     elif np.can_cast(shorttype, dtype, 'safe') and np.can_cast(dtype, shorttype, 'same_kind') and dtype.itemsize > shorttype.itemsize:
         return shorttype

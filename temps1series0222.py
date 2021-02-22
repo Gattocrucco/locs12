@@ -594,3 +594,98 @@ temporal res. = {self.tres:.2g} ns
 sigma = {self.sigma:.2g} ns
 dead radius = {self.deadradius:.0f} ns
 midpoints = {self.midpoints}"""
+
+if __name__ == '__main__':
+    
+    arguments = dict(
+        DCR = [25e-9, 250e-9],
+        VL = [0.3, 3],
+        nphotons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 25, 30, 40],
+    )
+    fixedarguments = dict(
+        nmc = 10000,
+        pbar_batch = None,
+        sigma = 25,
+        tres = 10,
+        filters = ['cross correlation', 'likelihood', 'coinc']
+    )
+    outfile = 'temps1series0222.npy'
+    
+    ####################
+    
+    import warnings
+    import os
+    
+    import tqdm
+    from numpy.lib import format as nplf
+    
+    import named_cartesian_product
+    
+    warnings.filterwarnings("ignore")
+    
+    generator = np.random.default_rng(202102222020)
+    
+    arglist = named_cartesian_product.named_cartesian_product(**arguments)
+    
+    rate = np.concatenate([
+        np.linspace(0, 100, 1000),
+        np.logspace(np.log10(100), np.log10(2e6), 1000)[1:]
+    ])
+    threshold = np.concatenate([
+        np.linspace(0, 1, 20)[:-1],
+        np.logspace(np.log10(1), np.log10(np.max(arguments['nphotons'])), 1000)
+    ])
+    
+    if not os.path.exists(outfile):
+        print(f'save to {outfile}...')
+        filterdtype = [
+            ('efficiency', float, len(rate)),
+            ('ratethr', float, len(threshold)),
+            ('effthr', float, len(threshold)),
+        ]
+        dtype = [
+            ('done', bool),
+            ('parameters', arglist.dtype),
+            ('rate', float, len(rate)),
+            ('threshold', float, len(threshold)),
+        ]
+        for f in fixedarguments['filters']:
+            dtype.append((f, filterdtype))
+        table = nplf.open_memmap(outfile, mode='w+', shape=arglist.shape, dtype=dtype)
+        table['done'] = False
+        table['parameters'] = arglist
+        table['rate'] = rate
+        table['threshold'] = threshold
+        table.flush()
+    else:
+        print(f'save to {outfile} (already exists)...')
+        table = nplf.open_memmap(outfile, mode='r+')
+    
+    table0 = table
+    table = table.view()
+    table.shape = (table.size,)
+    
+    indices = np.flatnonzero(~table['done'])
+    np.random.shuffle(indices)
+    
+    kw = dict(generator=generator)
+    kw.update(fixedarguments)
+    
+    for i in tqdm.tqdm(indices):
+        entry = table[i]
+        
+        argstruct = entry['parameters']
+        argdict = {k: argstruct[k] for k in argstruct.dtype.names}
+        kw.update(argdict)
+        
+        sim = Simulation(**kw)
+        for fname in sim.filters:
+            f, r = sim.efficiency_vs_rate(fname, interp=True)
+            entry[fname]['efficiency'] = f(entry['rate'])
+            g, tg = sim.candidates_above_threshold(fname, 'dcr', False, True)
+            entry[fname]['ratethr'] = g(entry['threshold'])
+            h, th = sim.candidates_above_threshold(fname, 'all', True, False)
+            entry[fname]['effthr'] = h(entry['threshold'])
+        
+        entry['done'] = True
+        table0.flush()
