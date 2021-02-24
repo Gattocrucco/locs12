@@ -20,36 +20,24 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
     temporal localization filters with the version of `temps1.py` from February
     3, 2021.
 
-  * `temps1series0203.py`: save efficiency vs. rate curves with `nmc=10000` of
-    s1 localization with the version of `temps1.py` from February 3, 2021.
-    (Goal: efficiency vs. number of photons.)
-    
-  * `temps1series0203plot.py`: plot the results from the above script (can be
-    executed while the other script is still running to show partial results).
+All the following `temps1series*.py` scripts write the results to
+`temps1series*.npy` and have a companion script `temps1series*plot.py` to do
+the plots, which can be used while the main script is still running to show
+partial results. The digits in the name are month-day.
 
-  * `temps1series0213.py`: save efficiency vs. rate and efficiency and rate vs.
-    threshold curves with `nmc=1000` of s1 localization with the version of
-    `temps1.py` from February 13, 2021. (Goal: exploratory study on ER/NR
-    discrimination and KDE bandwidth.)
+  * `temps1series0203.py`: efficiency vs. number of photons.
     
-  * `temps1series0213plot.py`: plot the results from the above script (can be
-    executed while the other script is still running to show partial results).
-
-  * `temps1series0214.py`: save efficiency vs. rate and efficiency and rate vs.
-    threshold curves with `nmc=1000` of s1 localization with the version of
-    `temps1.py` from February 13, 2021. (Goal: exploratory study on fast/slow
-    discrimination and KDE bandwidth.)
+  * `temps1series0213.py`: ER/NR discrimination and KDE bandwidth.
     
-  * `temps1series0214plot.py`: plot the results from the above script (can be
-    executed while the other script is still running to show partial results).
-
-  * `temps1series0222.py`: save efficiency vs. rate and efficiency and rate vs.
-    threshold curves with `nmc=10000` of s1 localization with the version of
-    `temps1.py` from February 23, 2021. (Goal: efficiency vs. number of
-    photons.)
+  * `temps1series0214.py`: fast/slow discrimination and KDE bandwidth.
     
-  * `temps1series0222plot.py`: plot the results from the above script (can be
-    executed while the other script is still running to show partial results).
+  * `temps1series0222.py`: compare likelihood, cross correlation, and
+    coincidence.
+    
+  * `temps1series0224.py`: find optimal coincidence time.
+    
+  * `temps1series02240.py`: compare likelihood, cross correlation, short and
+    long coincidence.
 
 ### Modules
 
@@ -60,6 +48,8 @@ Code to study the localization of S1 and S2 signals in DarkSide20k.
 
   * `clusterargsort.py`: filter away values which are close to an higher value
     in a signal.
+    
+  * `coincth.py`: formulas for the coincidence rate.
 
   * `dcr.py`: generate uniform hits.
   

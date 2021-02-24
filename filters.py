@@ -129,6 +129,7 @@ def filters(
             'fast'
             'slow'
             'coinc'
+            'coincXXXX' where XXXX is the time in nanoseconds
             'likelihood'
             'sample mode'
             'sample mode cross correlation'
@@ -137,7 +138,7 @@ def filters(
     VLER, VLNR : scalar
         VL p_S1_gauss parameter for the ER and NR filters.
     tcoinc : scalar
-        Length of the coincidence window for the coinc filter.
+        Time for the 'coinc' filter.
     dcr, nph, sigma: scalar
         Parameters for the 'likelihood' filter.
     
@@ -183,9 +184,11 @@ def filters(
         fun = lambda t: pS1.p_exp_gauss(t + offset, tau, tres) / ampl
         template[f] = (numba.njit('f8(f8)')(fun), -5 * tres, max(10 * tau, 5 * tres))
     
-    if 'coinc' in which:
-        eps = 0.00001
-        template['coinc'] = (numba.njit('f8(f8)')(lambda t: 1), -eps * tcoinc, (1 - eps) * tcoinc)
+    for f in which:
+        if f.startswith('coinc'):
+            T = float(f[5:]) if len(f) > 5 else tcoinc
+            eps = 1e-6
+            template[f] = (numba.njit('f8(f8)')(lambda t: 1), -eps * T, (1 - eps) * T)
     
     if 'likelihood' in which:
         offset = pS1.p_S1_gauss_maximum(vl, tauV, tauL, sigma)
