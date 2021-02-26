@@ -73,9 +73,10 @@ def deadtimerate(rate, deadtime, restartable):
     if restartable:
         p = np.exp(-mu)
     else:
-        w = special.lambertw(mu)
-        assert np.all(np.imag(w) == 0)
-        p = np.real(w) / mu
+        p = 1 / (1 + mu)
+        # this formula is empirical, it has the correct asymptotes:
+        # mu -> 0       p ~ 1 - mu
+        # mu -> inf     p ~ 1 / mu
     return rate * p
 
 if __name__ == '__main__':

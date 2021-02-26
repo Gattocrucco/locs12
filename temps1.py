@@ -342,13 +342,14 @@ class Simulation(npzload.NPZLoad):
                 x = np.concatenate([t, t[-1:]])
                 y = np.concatenate([f(t), [0]])
                 ax.plot(x, y, drawstyle='steps-pre', **self.plotkw[k])
-            if k == 'dcr' and fname == 'coinc':
+            if k == 'dcr' and fname.startswith('coinc'):
+                tcoinc = self.tcoinc if len(fname) == 5 else float(fname[5:])
                 thr = np.linspace(np.min(t), np.max(t), 1000)
-                rth = coincth.coincrate(mincount=thr, tcoinc=self.tcoinc, rate=self.DCR * self.npdm)
-                rth = coincth.deadtimerate(rate=rth, deadtime=2 * self.deadradius, restartable=False)
+                rth = coincth.coincrate(mincount=thr, tcoinc=tcoinc, rate=self.DCR * self.npdm)
+                rth = coincth.deadtimerate(rate=rth, deadtime=self.deadradius, restartable=False)
                 rth *= 1e9 # ns^-1 -> s^-1
                 kw = dict(self.plotkw[k])
-                kw.update(label=kw['label'] + ' (theory)', alpha=0.3)
+                kw.update(label=kw['label'] + ' (theory)', alpha=0.3, linestyle='-')
                 ax.plot(thr, rth, **kw)
         
         rate1 = 1 / (self.T * 1e-9)

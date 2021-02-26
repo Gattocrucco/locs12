@@ -153,13 +153,18 @@ def filters(
     assert len(hits.shape) == 2
     
     nt = (hits.shape[1] - 1) * (midpoints + 1) + 1
-    length = collections.defaultdict(lambda: nt)
-    length['sample mode'] = hits.shape[1] - 1
+    def filtlength(f):
+        if f == 'sample mode':
+            return hits.shape[1] - 1
+        elif f.startswith('coinc'):
+            return hits.shape[1]
+        else:
+            return nt
     
     out = np.empty(len(hits), dtype=[
         (filter_name, [
-            ('time', float, (length[filter_name],)),
-            ('value', float, (length[filter_name],))
+            ('time', float, (filtlength(filter_name),)),
+            ('value', float, (filtlength(filter_name),))
         ]) for filter_name in which
     ])
     
@@ -168,7 +173,13 @@ def filters(
     
     template = dict()
     
-    for vl, f in [(VL, 'sample mode cross correlation'), (VL, 'cross correlation'), (VLER, 'ER'), (VLNR, 'NR')]:
+    smcc = 'sample mode cross correlation'
+    havesmcc = smcc in which
+    
+    sm = 'sample mode'
+    havesm = sm in which
+
+    for vl, f in [(VL, smcc), (VL, 'cross correlation'), (VLER, 'ER'), (VLNR, 'NR')]:
         if f not in which:
             continue
         offset = pS1.p_S1_gauss_maximum(vl, tauV, tauL, tres)
@@ -184,11 +195,14 @@ def filters(
         fun = lambda t: pS1.p_exp_gauss(t + offset, tau, tres) / ampl
         template[f] = (numba.njit('f8(f8)')(fun), -5 * tres, max(10 * tau, 5 * tres))
     
+    coincbounds = {}
     for f in which:
         if f.startswith('coinc'):
             T = float(f[5:]) if len(f) > 5 else tcoinc
             eps = 1e-6
-            template[f] = (numba.njit('f8(f8)')(lambda t: 1), -eps * T, (1 - eps) * T)
+            coincbounds[f] = (-eps * T, (1 - eps) * T)
+    if coincbounds:
+        templcoinc = numba.njit('f8(f8)')(lambda t: 1)
     
     if 'likelihood' in which:
         offset = pS1.p_S1_gauss_maximum(vl, tauV, tauL, sigma)
@@ -204,23 +218,27 @@ def filters(
     
         timevalue = {}
     
-        if 'sample mode' in which:
+        if havesm:
             v = filter_sample_mode(hits)
             t = (hits[:, 1:] + hits[:, :-1]) / 2
-            timevalue['sample mode'] = (t, v)
+            timevalue[sm] = (t, v)
         
-        t = addmidpoints(hits, midpoints)
+        if havesmcc or template:
+            t = addmidpoints(hits, midpoints)
     
         for filt, (fun, left, right) in template.items():
             v = filter_cross_correlation(hits, t, fun, left, right)
             timevalue[filt] = (t, v)
         
-        name = 'sample mode cross correlation'
-        if name in which:
-            fun, left, right = template[name]
+        if havesmcc:
+            fun, left, right = template[smcc]
             v = filter_sample_mode_cross_correlation(hits, t, fun, left, right)
-            timevalue[name] = (t, v)
+            timevalue[smcc] = (t, v)
     
+        for filt, (left, right) in coincbounds.items():
+            v = filter_cross_correlation(hits, hits, templcoinc, left, right)
+            timevalue[filt] = (hits, v)
+        
         for k, (t, v) in timevalue.items():
             out[k]['time'] = t
             out[k]['value'] = v

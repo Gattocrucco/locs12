@@ -342,13 +342,14 @@ class Simulation(npzload.NPZLoad):
                 x = np.concatenate([t, t[-1:]])
                 y = np.concatenate([f(t), [0]])
                 ax.plot(x, y, drawstyle='steps-pre', **self.plotkw[k])
-            if k == 'dcr' and fname == 'coinc':
+            if k == 'dcr' and fname.startswith('coinc'):
+                tcoinc = self.tcoinc if len(fname) == 5 else float(fname[5:])
                 thr = np.linspace(np.min(t), np.max(t), 1000)
-                rth = coincth.coincrate(mincount=thr, tcoinc=self.tcoinc, rate=self.DCR * self.npdm)
-                rth = coincth.deadtimerate(rate=rth, deadtime=2 * self.deadradius, restartable=False)
+                rth = coincth.coincrate(mincount=thr, tcoinc=tcoinc, rate=self.DCR * self.npdm)
+                rth = coincth.deadtimerate(rate=rth, deadtime=self.deadradius, restartable=False)
                 rth *= 1e9 # ns^-1 -> s^-1
                 kw = dict(self.plotkw[k])
-                kw.update(label=kw['label'] + ' (theory)', alpha=0.3)
+                kw.update(label=kw['label'] + ' (theory)', alpha=0.3, linestyle='-')
                 ax.plot(thr, rth, **kw)
         
         rate1 = 1 / (self.T * 1e-9)
@@ -611,16 +612,16 @@ if __name__ == '__main__':
         VL = [0.3, 3],
         nphotons = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 25, 30, 40],
     )
+    tcoinc = [10, 20, 40, 80, 160, 320, 640, 1280, 2560, 5120]
     fixedarguments = dict(
         nmc = 1000,
         T = 1e6,
         pbar_batch = None,
-        sigma = 25,
         tres = 10,
-        filters = ['cross correlation', 'likelihood', 'coinc40', 'coinc2560'],
-        deadradius = 2600 * 2,
+        filters = [f'coinc{t}' for t in tcoinc],
+        deadradius = max(2000, 2 * max(tcoinc)),
     )
-    outfile = 'temps1series02240-2.npy'
+    outfile = 'temps1series0226.npy'
     
     ####################
     
@@ -634,7 +635,7 @@ if __name__ == '__main__':
     
     warnings.filterwarnings("ignore")
     
-    generator = np.random.default_rng(202102241821)
+    generator = np.random.default_rng(202102261216)
     
     arglist = named_cartesian_product.named_cartesian_product(**arguments)
     
@@ -660,9 +661,11 @@ if __name__ == '__main__':
             ('parameters', arglist.dtype),
             ('rate', float, len(rate)),
             ('threshold', float, len(threshold)),
+            ('filters', [
+                (f, filterdtype)
+                for f in fixedarguments['filters']
+            ]),
         ]
-        for f in fixedarguments['filters']:
-            dtype.append((f, filterdtype))
         table = nplf.open_memmap(outfile, mode='w+', shape=arglist.shape, dtype=dtype)
         table['done'] = False
         table['parameters'] = arglist
@@ -692,14 +695,19 @@ if __name__ == '__main__':
         
         sim = Simulation(**kw)
         for fname in sim.filters:
+            fentry = entry['filters'][fname]
+            
             f, r = sim.efficiency_vs_rate(fname, interp=True)
-            entry[fname]['efficiency'] = f(entry['rate'])
+            fentry['efficiency'] = f(entry['rate'])
+            
             fn, rn = sim.efficiency_vs_rate(fname, interp=False)
-            entry[fname]['efficiencynointerp'] = fn(entry['rate'])
+            fentry['efficiencynointerp'] = fn(entry['rate'])
+            
             g, tg = sim.candidates_above_threshold(fname, 'dcr', False, True)
-            entry[fname]['ratethr'] = g(entry['threshold'])
+            fentry['ratethr'] = g(entry['threshold'])
+            
             h, th = sim.candidates_above_threshold(fname, 'all', True, False)
-            entry[fname]['effthr'] = h(entry['threshold'])
+            fentry['effthr'] = h(entry['threshold'])
         
         entry['done'] = True
         table0.flush()

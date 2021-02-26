@@ -25,20 +25,22 @@ All the following `temps1series*.py` scripts write the results to
 the plots, which can be used while the main script is still running to show
 partial results. The digits in the name are month-day.
 
-  * `temps1series0203.py`: efficiency vs. number of photons.
+  * `temps1series0203.py`: **(OUTDATED)** efficiency vs. number of photons.
     
   * `temps1series0213.py`: ER/NR discrimination and KDE bandwidth.
     
   * `temps1series0214.py`: fast/slow discrimination and KDE bandwidth.
     
-  * `temps1series0222.py`: compare likelihood, cross correlation, and
-    coincidence.
+  * `temps1series0222.py`: **(OUTDATED)** compare likelihood, cross
+    correlation, and coincidence.
     
-  * `temps1series0224.py`: find optimal coincidence time.
+  * `temps1series0224.py`: **(OUTDATED)** find optimal coincidence time.
     
   * `temps1series02240.py`: compare likelihood, cross correlation, short and
     long coincidence.
 
+  * `temps1series0226.py`: find optimal coincidence time.
+    
 ### Modules
 
   * `aligntwin.py`: code to align the ticks of multiple plot scales.
