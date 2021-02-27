@@ -36,10 +36,15 @@ partial results. The digits in the name are month-day.
     
   * `temps1series0224.py`: **(OUTDATED)** find optimal coincidence time.
     
-  * `temps1series02240.py`: compare likelihood, cross correlation, short and
-    long coincidence.
+  * `temps1series02240.py`: **(OUTDATED)** compare likelihood, cross
+    correlation, and coincidence.
 
   * `temps1series0226.py`: find optimal coincidence time.
+  
+  * `temps1series0226z.py`: find optimal cross correlation template sigma.
+  
+  * `temps1series0227.py`: compare likelihood, cross correlation, and
+    coincidence.
     
 ### Modules
 

@@ -115,12 +115,15 @@ def filters(
     hits : array (nevents, nhits)
         The hit times. Need not be sorted.
     VL : scalar
-        VL p_S1_gauss parameter for the cross correlation filter.
+        VL p_S1_gauss parameter for the filters 'cross correlation',
+        'likelihood', 'sample mode cross correlation'.
     tauV, tauL, tres : scalar
-        p_S1_gauss parameters for the cross correlation, ER and NR filters.
+        p_S1_gauss parameters for the filters 'cross correlation', 'ER', 'NR',
+        'fast', 'slow', 'likelihood', 'sample mode cross correlation'.
     midpoints : int
-        The continuous filters are computed on the hits times but the last and
-        on `midpoints` evenly spaced intermediate points between each hit.
+        The continuous filters are computed on the hits times and on
+        `midpoints` evenly spaced intermediate points between each hit, apart
+        from the 'coinc*' filters which are computed only on hits.
     which : list of strings
         The filters to compute. Keywords:
             'cross correlation'
@@ -129,7 +132,7 @@ def filters(
             'fast'
             'slow'
             'coinc'
-            'coincXXXX' where XXXX is the time in nanoseconds
+            'coincX' where X is the time in nanoseconds
             'likelihood'
             'sample mode'
             'sample mode cross correlation'
