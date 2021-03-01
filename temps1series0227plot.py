@@ -8,7 +8,7 @@ rate = 10
 
 table = np.load('temps1series0227.npy')
 
-fig, ax = plt.subplots(num='temps1series0227plot', clear=True, figsize=[7.78, 5.41])
+fig, ax = plt.subplots(num='temps1series0227plot', clear=True, figsize=[7.08, 4.99])
 
 ax.set_title('S1 efficiency at fixed fake rate')
 ax.set_xlabel('Number of S1 p.e.')

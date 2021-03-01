@@ -74,9 +74,6 @@ def deadtimerate(rate, deadtime, restartable):
         p = np.exp(-mu)
     else:
         p = 1 / (1 + mu)
-        # this formula is empirical, it has the correct asymptotes:
-        # mu -> 0       p ~ 1 - mu
-        # mu -> inf     p ~ 1 / mu
     return rate * p
 
 if __name__ == '__main__':
